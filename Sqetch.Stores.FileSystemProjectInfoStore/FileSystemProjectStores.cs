@@ -1,0 +1,71 @@
+namespace Pug.Sqetch.Stores.FileSystem;
+
+/// <summary>
+/// Entry point for the file-system project store: initializes a project directory or
+/// opens an existing one, exposing the <see cref="IProjectInfoStore"/> and
+/// <see cref="IScriptsStore"/> pair backed by that directory.
+/// </summary>
+public sealed class FileSystemProjectStores : IDisposable
+{
+	private readonly ProjectStoreSession _session;
+
+	private FileSystemProjectStores( ProjectStoreSession session )
+	{
+		_session = session;
+		InfoStore = new FileSystemProjectInfoStore( session );
+		ScriptsStore = new FileSystemScriptsStore( session );
+	}
+
+	public IProjectInfoStore InfoStore { get; }
+
+	public IScriptsStore ScriptsStore { get; }
+
+	public static FileSystemProjectStores Open( string path, ReleaseShardingStrategyRegistry? shardingStrategies = null )
+		=> new ( new ProjectStoreSession( path, shardingStrategies ?? new ReleaseShardingStrategyRegistry() ) );
+
+	public static FileSystemProjectStores Initialize(
+		ProjectDefinition definition, ActionContext context, string path,
+		ShardingConfiguration? releaseSharding = null, ReleaseShardingStrategyRegistry? shardingStrategies = null )
+	{
+		ArgumentNullException.ThrowIfNull( definition );
+		ArgumentNullException.ThrowIfNull( context );
+		NameRules.Ensure( definition.Name, "Project" );
+
+		string root = Path.GetFullPath( path );
+
+		if( File.Exists( Path.Combine( root, FileNames.ProjectFile ) ) )
+			throw new ProjectStoreException( $"'{root}' already contains a Sqetch project." );
+
+		ReleaseShardingStrategyRegistry registry = shardingStrategies ?? new ReleaseShardingStrategyRegistry();
+
+		ShardingConfiguration sharding = releaseSharding ?? new ShardingConfiguration( FlatShardingStrategy.StrategyName );
+
+		// resolve before persisting so an unknown strategy name fails here, not on open
+		registry.Create( sharding );
+
+		Directory.CreateDirectory( Path.Combine( root, FileNames.PlansDirectory ) );
+		Directory.CreateDirectory( Path.Combine( root, FileNames.ReleasesDirectory ) );
+
+		JsonFiles.Write(
+			Path.Combine( root, FileNames.ProjectFile ),
+			new ProjectDocument(
+				definition.Name, definition.Description, definition.Engine,
+				ActionDocument.From( context ), sharding ) );
+
+		AtomicFile.WriteAllText( Path.Combine( root, FileNames.PlanIndexFile ), string.Empty );
+
+		return Open( root, registry );
+	}
+
+	/// <summary>
+	/// Rebuilds the derived 'plan-index' file from the plan folders — recovery path for a
+	/// mangled merge or manual edits.
+	/// </summary>
+	public void Reindex() => _session.Reindex();
+
+	public void Dispose()
+	{
+		InfoStore.Dispose();
+		ScriptsStore.Dispose();
+	}
+}

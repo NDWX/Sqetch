@@ -1,0 +1,402 @@
+namespace Pug.Sqetch.Stores.FileSystem;
+
+/// <summary>
+/// Git-friendly file-system implementation of <see cref="IProjectInfoStore"/>. Unreleased
+/// plans live under 'plans/'; adding a plan to a release physically moves its folder under
+/// the release (so git shows the assignment as a rename and the root 'plans/' folder only
+/// ever holds in-flight work), and the committed 'plan-index' file locates any plan ever
+/// created without scanning release folders.
+/// </summary>
+public sealed class FileSystemProjectInfoStore : IProjectInfoStore
+{
+	private readonly ProjectStoreSession _session;
+
+	internal FileSystemProjectInfoStore( ProjectStoreSession session )
+	{
+		_session = session;
+	}
+
+	public ProjectDefinition GetDefinition()
+		=> new ( _session.Project.Name, _session.Project.Description, _session.Project.Engine );
+
+	public void AddPlan( ObjectDefinition definition, IEnumerable<string> dependencies, ActionContext context )
+	{
+		NameRules.Ensure( definition.Name, "Plan" );
+
+		if( _session.PlanIndex.Contains( definition.Name ) )
+			throw new DuplicatePlanNameException();
+
+		string[] dependencyNames = dependencies.ToArray();
+
+		JsonFiles.Write(
+			_session.Paths.PlanFile( string.Empty, definition.Name ),
+			new PlanDocument(
+				definition.Name, definition.Description, dependencyNames, string.Empty,
+				ActionDocument.From( context ), null ) );
+
+		_session.PlanIndex.Set( new PlanIndexEntry( definition.Name, string.Empty, dependencyNames ) );
+	}
+
+	public void UpdatePlan( ObjectDefinition definition )
+	{
+		(PlanIndexEntry entry, string planFile, PlanDocument document) = RequirePlanDocument( definition.Name );
+
+		_session.EnsureReleaseNotFinalized( entry.Release );
+
+		JsonFiles.Write( planFile, document with { Description = definition.Description } );
+	}
+
+	public bool PlanExists( string name ) => _session.PlanIndex.Contains( name );
+
+	public IDictionary<string, ProjectPlan> GetPlans( string? release = null )
+	{
+		IEnumerable<PlanIndexEntry> entries = release is null
+			? _session.PlanIndex.Entries
+			: _session.PlanIndex.Entries.Where(
+				x => string.Equals( x.Release, release, StringComparison.OrdinalIgnoreCase ) );
+
+		Dictionary<string, ProjectPlan> plans = new ( StringComparer.OrdinalIgnoreCase );
+
+		foreach( PlanIndexEntry entry in entries )
+			plans[entry.Name] = ReadPlanDocument( entry ).ToModel();
+
+		return plans;
+	}
+
+	public ProjectPlan? GetPlan( string name )
+	{
+		PlanIndexEntry? entry = _session.PlanIndex.Get( name );
+
+		return entry is null ? null : ReadPlanDocument( entry ).ToModel();
+	}
+
+	public IEnumerable<string> GetPlanDependencies( string name )
+		=> _session.RequirePlan( name ).Dependencies;
+
+	public IEnumerable<string> GetPlanDependants( string name )
+		=> _session.PlanIndex.Entries
+					.Where( x => x.Dependencies.Contains( name, StringComparer.OrdinalIgnoreCase ) )
+					.Select( x => x.Name )
+					.ToArray();
+
+	public void SetPlanDependencies( string name, IEnumerable<string> dependencies )
+	{
+		(PlanIndexEntry entry, string planFile, PlanDocument document) = RequirePlanDocument( name );
+
+		_session.EnsureReleaseNotFinalized( entry.Release );
+
+		string[] dependencyNames = dependencies.ToArray();
+
+		JsonFiles.Write( planFile, document with { Dependencies = dependencyNames } );
+
+		_session.PlanIndex.Set( entry with { Dependencies = dependencyNames } );
+	}
+
+	public void AddStep( string plan, ObjectDefinition definition, IEnumerable<string> dependencies, ActionContext context )
+	{
+		NameRules.Ensure( definition.Name, "Step" );
+
+		PlanIndexEntry entry = _session.RequirePlan( plan );
+
+		_session.EnsureReleaseNotFinalized( entry.Release );
+
+		if( FindStepDirectory( entry, definition.Name ) is not null )
+			throw new DuplicateStepNameException();
+
+		JsonFiles.Write(
+			_session.Paths.StepFile( entry.Release, entry.Name, definition.Name ),
+			new StepDocument( definition.Name, definition.Description, dependencies.ToArray(), ActionDocument.From( context ) ) );
+	}
+
+	public void UpdateStep( string plan, ObjectDefinition definition )
+	{
+		(PlanIndexEntry entry, string stepFile, StepDocument document) = RequireStepDocument( plan, definition.Name );
+
+		_session.EnsureReleaseNotFinalized( entry.Release );
+
+		JsonFiles.Write( stepFile, document with { Description = definition.Description } );
+	}
+
+	public bool StepExists( string plan, string name )
+	{
+		PlanIndexEntry? entry = _session.PlanIndex.Get( plan );
+
+		return entry is not null && FindStepDirectory( entry, name ) is not null;
+	}
+
+	public IDictionary<string, ProjectElement> GetSteps( string plan )
+	{
+		PlanIndexEntry entry = _session.RequirePlan( plan );
+
+		Dictionary<string, ProjectElement> steps = new ( StringComparer.OrdinalIgnoreCase );
+
+		foreach( StepDocument document in EnumerateStepDocuments( entry ) )
+			steps[document.Name] = document.ToModel( entry.Name );
+
+		return steps;
+	}
+
+	public ProjectElement? GetStep( string plan, string name )
+	{
+		PlanIndexEntry? entry = _session.PlanIndex.Get( plan );
+
+		if( entry is null )
+			return null;
+
+		string? stepDirectory = FindStepDirectory( entry, name );
+
+		return stepDirectory is null
+			? null
+			: JsonFiles.Read<StepDocument>( Path.Combine( stepDirectory, FileNames.StepFile ) ).ToModel( entry.Name );
+	}
+
+	public IEnumerable<string> GetStepDependencies( string plan, string name )
+	{
+		(_, _, StepDocument document) = RequireStepDocument( plan, name );
+
+		return document.Dependencies;
+	}
+
+	public void SetStepDependencies( string plan, string name, IEnumerable<string> dependencies )
+	{
+		(PlanIndexEntry entry, string stepFile, StepDocument document) = RequireStepDocument( plan, name );
+
+		_session.EnsureReleaseNotFinalized( entry.Release );
+
+		JsonFiles.Write( stepFile, document with { Dependencies = dependencies.ToArray() } );
+	}
+
+	public IEnumerable<string> GetStepDependants( string plan, string name )
+	{
+		PlanIndexEntry entry = _session.RequirePlan( plan );
+
+		return EnumerateStepDocuments( entry )
+				.Where( x => x.Dependencies.Contains( name, StringComparer.OrdinalIgnoreCase ) )
+				.Select( x => x.Name )
+				.ToArray();
+	}
+
+	public void DeletePlan( string name )
+	{
+		PlanIndexEntry? entry = _session.PlanIndex.Get( name );
+
+		if( entry is null )
+			return;
+
+		_session.EnsureReleaseNotFinalized( entry.Release );
+
+		string planDirectory = _session.Paths.PlanDirectory( entry.Release, entry.Name );
+
+		if( Directory.Exists( planDirectory ) )
+			Directory.Delete( planDirectory, recursive: true );
+
+		_session.PlanIndex.Remove( entry.Name );
+	}
+
+	public void DeleteStep( string plan, string name )
+	{
+		PlanIndexEntry entry = _session.RequirePlan( plan );
+
+		_session.EnsureReleaseNotFinalized( entry.Release );
+
+		string? stepDirectory = FindStepDirectory( entry, name );
+
+		if( stepDirectory is not null )
+			Directory.Delete( stepDirectory, recursive: true );
+	}
+
+	public bool VersionExists( string name ) => _session.ReadRelease( name ) is not null;
+
+	public IEnumerable<ProjectRelease> GetReleases(
+		string prefix = "", bool released = false,
+		Range<DateTime>? createTimestamp = null, Range<DateTime>? finalizeTimestamp = null )
+	{
+		List<ProjectRelease> releases = [];
+
+		foreach( ReleaseDocument document in EnumerateReleaseDocuments( prefix ) )
+		{
+			if( released != document.Finalized is not null )
+				continue;
+
+			if( createTimestamp is not null && !document.Registration.Timestamp.IsWithin( createTimestamp ) )
+				continue;
+
+			if( finalizeTimestamp is not null &&
+				( document.Finalized is null || !document.Finalized.Timestamp.IsWithin( finalizeTimestamp ) ) )
+				continue;
+
+			releases.Add( document.ToModel() );
+		}
+
+		return releases;
+	}
+
+	public ProjectRelease? GetRelease( string name ) => _session.ReadRelease( name )?.ToModel();
+
+	public void AddRelease( ObjectDefinition definition, ActionContext context )
+	{
+		NameRules.Ensure( definition.Name, "Release" );
+
+		if( _session.ReadRelease( definition.Name ) is not null )
+			throw new DuplicateReleaseNameException();
+
+		string dependency = ( definition as ReleaseDefinition )?.Dependency ?? string.Empty;
+
+		JsonFiles.Write(
+			_session.Paths.ReleaseFile( definition.Name ),
+			new ReleaseDocument( definition.Name, definition.Description, dependency, ActionDocument.From( context ), null ) );
+	}
+
+	public void SetReleaseContext( string release, ActionContext releaseContext )
+	{
+		ReleaseDocument document = _session.RequireRelease( release );
+
+		if( document.Finalized is not null )
+			throw new ReleaseFinalizedException();
+
+		JsonFiles.Write(
+			_session.Paths.ReleaseFile( document.Name ),
+			document with { Finalized = ActionDocument.From( releaseContext ) } );
+	}
+
+	public IEnumerable<ProjectRelease> GetReleaseDependants( string release )
+		=> EnumerateReleaseDocuments( string.Empty )
+			.Where( x => string.Equals( x.Dependency, release, StringComparison.OrdinalIgnoreCase ) )
+			.Select( x => x.ToModel() )
+			.ToArray();
+
+	public IEnumerable<ProjectElement> GetReleasePlans( string release )
+	{
+		ReleaseDocument document = _session.RequireRelease( release );
+
+		string plansDirectory = _session.Paths.ReleasePlansDirectory( document.Name );
+
+		if( !Directory.Exists( plansDirectory ) )
+			return [];
+
+		List<ProjectElement> plans = [];
+
+		foreach( string planDirectory in Directory.EnumerateDirectories( plansDirectory ) )
+		{
+			PlanDocument? plan = JsonFiles.TryRead<PlanDocument>( Path.Combine( planDirectory, FileNames.PlanFile ) );
+
+			if( plan is not null )
+				plans.Add( plan.ToModel() );
+		}
+
+		return plans;
+	}
+
+	public void AddReleasePlan( string release, string name, ActionContext context )
+	{
+		PlanIndexEntry entry = _session.RequirePlan( name );
+
+		if( !string.IsNullOrEmpty( entry.Release ) )
+			throw new InvalidOperationException( $"Plan '{name}' is already part of release '{entry.Release}'." );
+
+		ReleaseDocument releaseDocument = _session.RequireRelease( release );
+
+		if( releaseDocument.Finalized is not null )
+			throw new ReleaseFinalizedException();
+
+		MovePlan( entry, entry.Release, releaseDocument.Name, ActionDocument.From( context ) );
+	}
+
+	public void DeleteReleasePlan( string release, string name, ActionContext context )
+	{
+		PlanIndexEntry entry = _session.RequirePlan( name );
+
+		if( !string.Equals( entry.Release, release, StringComparison.OrdinalIgnoreCase ) )
+			throw new InvalidOperationException( $"Plan '{name}' is not part of release '{release}'." );
+
+		ReleaseDocument releaseDocument = _session.RequireRelease( release );
+
+		if( releaseDocument.Finalized is not null )
+			throw new ReleaseFinalizedException();
+
+		MovePlan( entry, entry.Release, string.Empty, null );
+	}
+
+	public void Dispose()
+	{
+		// all writes are flushed eagerly; nothing to release
+	}
+
+	private void MovePlan( PlanIndexEntry entry, string fromRelease, string toRelease, ActionDocument? assignment )
+	{
+		string source = _session.Paths.PlanDirectory( fromRelease, entry.Name );
+		string destination = _session.Paths.PlanDirectory( toRelease, entry.Name );
+
+		Directory.CreateDirectory( Path.GetDirectoryName( destination )! );
+		Directory.Move( source, destination );
+
+		string planFile = Path.Combine( destination, FileNames.PlanFile );
+
+		JsonFiles.Write(
+			planFile,
+			JsonFiles.Read<PlanDocument>( planFile ) with { Release = toRelease, ReleaseAssignment = assignment } );
+
+		_session.PlanIndex.Set( entry with { Release = toRelease } );
+	}
+
+	private PlanDocument ReadPlanDocument( PlanIndexEntry entry )
+		=> JsonFiles.Read<PlanDocument>( _session.Paths.PlanFile( entry.Release, entry.Name ) );
+
+	private (PlanIndexEntry Entry, string PlanFile, PlanDocument Document) RequirePlanDocument( string name )
+	{
+		PlanIndexEntry entry = _session.RequirePlan( name );
+
+		string planFile = _session.Paths.PlanFile( entry.Release, entry.Name );
+
+		return (entry, planFile, JsonFiles.Read<PlanDocument>( planFile ));
+	}
+
+	private (PlanIndexEntry Entry, string StepFile, StepDocument Document) RequireStepDocument( string plan, string name )
+	{
+		PlanIndexEntry entry = _session.RequirePlan( plan );
+
+		string? stepDirectory = FindStepDirectory( entry, name )
+								?? throw new ProjectStoreException( $"Step '{name}' of plan '{plan}' does not exist." );
+
+		string stepFile = Path.Combine( stepDirectory, FileNames.StepFile );
+
+		return (entry, stepFile, JsonFiles.Read<StepDocument>( stepFile ));
+	}
+
+	// a directory only counts as a step once step.json exists; scripts may be written
+	// into the directory before the step itself is registered
+	private string? FindStepDirectory( PlanIndexEntry entry, string step )
+	{
+		string stepsDirectory = _session.Paths.StepsDirectory( entry.Release, entry.Name );
+
+		if( !Directory.Exists( stepsDirectory ) )
+			return null;
+
+		return Directory.EnumerateDirectories( stepsDirectory )
+						.FirstOrDefault(
+							x => string.Equals( Path.GetFileName( x ), step, StringComparison.OrdinalIgnoreCase ) &&
+								File.Exists( Path.Combine( x, FileNames.StepFile ) ) );
+	}
+
+	private IEnumerable<StepDocument> EnumerateStepDocuments( PlanIndexEntry entry )
+	{
+		string stepsDirectory = _session.Paths.StepsDirectory( entry.Release, entry.Name );
+
+		if( !Directory.Exists( stepsDirectory ) )
+			yield break;
+
+		foreach( string stepDirectory in Directory.EnumerateDirectories( stepsDirectory ) )
+		{
+			StepDocument? document = JsonFiles.TryRead<StepDocument>( Path.Combine( stepDirectory, FileNames.StepFile ) );
+
+			if( document is not null )
+				yield return document;
+		}
+	}
+
+	private IEnumerable<ReleaseDocument> EnumerateReleaseDocuments( string prefix )
+	{
+		foreach( string releaseDirectory in _session.Paths.EnumerateReleaseDirectories( prefix ) )
+			yield return JsonFiles.Read<ReleaseDocument>( Path.Combine( releaseDirectory, FileNames.ReleaseFile ) );
+	}
+}
