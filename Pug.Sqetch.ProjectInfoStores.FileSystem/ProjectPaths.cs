@@ -41,7 +41,29 @@ public sealed class ProjectPaths
 	public string StepFile( string release, string plan, string step )
 		=> Path.Combine( StepDirectory( release, plan, step ), FileNames.StepFile );
 
+	/// <summary>
+	/// Where the release currently lives. Only finalized releases are sharded: an
+	/// unfinalized release sits directly under 'releases'. Resolved by probing both
+	/// locations, so a release name that exists nowhere yet resolves to the unsharded
+	/// location new releases are created in.
+	/// </summary>
 	public string ReleaseDirectory( string release )
+	{
+		string unsharded = Path.Combine( ReleasesDirectory, release );
+
+		if( File.Exists( Path.Combine( unsharded, FileNames.ReleaseFile ) ) )
+			return unsharded;
+
+		string sharded = FinalizedReleaseDirectory( release );
+
+		return File.Exists( Path.Combine( sharded, FileNames.ReleaseFile ) ) ? sharded : unsharded;
+	}
+
+	/// <summary>
+	/// Where the release belongs once finalized — the target of the folder move performed
+	/// at finalization, when the release enters its shard.
+	/// </summary>
+	public string FinalizedReleaseDirectory( string release )
 	{
 		string shard = _sharding.GetShardPath( release );
 
@@ -60,24 +82,39 @@ public sealed class ProjectPaths
 		=> Path.GetRelativePath( Root, path ).Replace( Path.DirectorySeparatorChar, '/' );
 
 	/// <summary>
-	/// Directories of releases whose name starts with <paramref name="prefix"/>, visiting
-	/// only the shards the strategy says may contain a match.
+	/// Directories of releases whose name starts with <paramref name="prefix"/>: the
+	/// unsharded (unfinalized) releases directly under 'releases', then the finalized ones,
+	/// visiting only the shards the strategy says may contain a match.
 	/// </summary>
 	public IEnumerable<string> EnumerateReleaseDirectories( string prefix )
 	{
 		if( !Directory.Exists( ReleasesDirectory ) )
 			yield break;
 
+		// with a sharded strategy the top level holds unfinalized releases; without one it
+		// is already covered by the zero-depth shard descent below
+		if( _sharding.ShardDepth > 0 )
+		{
+			foreach( string releaseDirectory in MatchingReleaseDirectoriesIn( ReleasesDirectory, prefix ) )
+				yield return releaseDirectory;
+		}
+
 		foreach( string shardDirectory in EnumerateShardDirectories( ReleasesDirectory, _sharding.ShardDepth, string.Empty, prefix ) )
 		{
-			foreach( string releaseDirectory in Directory.EnumerateDirectories( shardDirectory ) )
-			{
-				string name = Path.GetFileName( releaseDirectory );
+			foreach( string releaseDirectory in MatchingReleaseDirectoriesIn( shardDirectory, prefix ) )
+				yield return releaseDirectory;
+		}
+	}
 
-				if( ( prefix.Length == 0 || name.StartsWith( prefix, StringComparison.Ordinal ) ) &&
-					File.Exists( Path.Combine( releaseDirectory, FileNames.ReleaseFile ) ) )
-					yield return releaseDirectory;
-			}
+	private static IEnumerable<string> MatchingReleaseDirectoriesIn( string directory, string prefix )
+	{
+		foreach( string releaseDirectory in Directory.EnumerateDirectories( directory ) )
+		{
+			string name = Path.GetFileName( releaseDirectory );
+
+			if( ( prefix.Length == 0 || name.StartsWith( prefix, StringComparison.Ordinal ) ) &&
+				File.Exists( Path.Combine( releaseDirectory, FileNames.ReleaseFile ) ) )
+				yield return releaseDirectory;
 		}
 	}
 

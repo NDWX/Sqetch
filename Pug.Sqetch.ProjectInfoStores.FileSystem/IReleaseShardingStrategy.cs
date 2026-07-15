@@ -1,10 +1,12 @@
 namespace Pug.Sqetch.Stores.FileSystem;
 
 /// <summary>
-/// Decides where a release folder lives under the 'releases' directory, so that directory
-/// listings stay bounded as releases accumulate. The strategy is recorded in the project
-/// file at initialization time and every client of the project must resolve it the same
-/// way, because it determines the physical layout shared through version control.
+/// Decides where a <em>finalized</em> release folder lives under the 'releases' directory,
+/// so that directory listings stay bounded as releases accumulate. Unfinalized releases are
+/// never sharded — only a few exist at a time, so they sit directly under 'releases' and
+/// move into their shard at finalization. The strategy is recorded in the project file at
+/// initialization time and every client of the project must resolve it the same way,
+/// because it determines the physical layout shared through version control.
 /// </summary>
 public interface IReleaseShardingStrategy
 {

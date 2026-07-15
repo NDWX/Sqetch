@@ -40,7 +40,7 @@ internal sealed class ProjectStoreSession
 		=> JsonFiles.TryRead<ReleaseDocument>( Paths.ReleaseFile( name ) );
 
 	public ReleaseDocument RequireRelease( string name )
-		=> ReadRelease( name ) ?? throw new UnknownReleaseException();
+		=> ReadRelease( name ) ?? throw new UnknownReleaseException( name );
 
 	/// <summary>
 	/// Everything under a finalized release's folder is immutable; refuse writes that

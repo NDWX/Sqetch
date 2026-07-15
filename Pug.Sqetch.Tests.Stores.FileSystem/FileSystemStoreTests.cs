@@ -122,9 +122,8 @@ public class FileSystemStoreTests
 
 		stores.InfoStore.AddReleasePlan( "2026.07", "customer-email", TestData.Context() );
 
-		string releaseDirectory = sharding == FlatShardingStrategy.StrategyName
-			? Path.Combine( project.Root, "releases", "2026.07" )
-			: Path.Combine( project.Root, "releases", "2026", "2026.07" );
+		// unfinalized releases are never sharded, whatever the strategy
+		string releaseDirectory = Path.Combine( project.Root, "releases", "2026.07" );
 
 		Assert.True( File.Exists( Path.Combine( releaseDirectory, "plans", "customer-email", "plan.json" ) ) );
 		Assert.True( File.Exists( Path.Combine( releaseDirectory, "plans", "customer-email", "steps", "add-column", "step.json" ) ) );
@@ -160,7 +159,20 @@ public class FileSystemStoreTests
 
 		stores.InfoStore.SetReleaseContext( "2026.07", TestData.Context() );
 
+		// finalization moves the release into its shard; everything stays reachable there
+		string finalizedDirectory = sharding == FlatShardingStrategy.StrategyName
+			? Path.Combine( project.Root, "releases", "2026.07" )
+			: Path.Combine( project.Root, "releases", "2026", "2026.07" );
+
+		Assert.True( File.Exists( Path.Combine( finalizedDirectory, "release.json" ) ) );
+		Assert.True( File.Exists( Path.Combine( finalizedDirectory, "plans", "customer-email", "plan.json" ) ) );
+
+		if( sharding != FlatShardingStrategy.StrategyName )
+			Assert.False( Directory.Exists( Path.Combine( project.Root, "releases", "2026.07" ) ) );
+
 		Assert.NotNull( stores.InfoStore.GetRelease( "2026.07" )!.Finalized );
+		Assert.True( stores.InfoStore.ReleaseExists( "2026.07" ) );
+		Assert.True( stores.InfoStore.StepExists( "customer-email", "add-column" ) );
 
 		Assert.Throws<ReleaseFinalizedException>( () => stores.InfoStore.SetReleaseContext( "2026.07", TestData.Context() ) );
 		Assert.Throws<ReleaseFinalizedException>( () => stores.InfoStore.UpdatePlan( new ObjectDefinition( "customer-email", "new" ) ) );
@@ -212,6 +224,28 @@ public class FileSystemStoreTests
 
 		Assert.Throws<DuplicateReleaseNameException>(
 			() => stores.InfoStore.AddRelease( new ReleaseDefinition( "2026.01", "", "" ), TestData.Context() ) );
+	}
+
+	[Fact]
+	public void ReleaseNamedLikeItsShardFinalizesIntoItsOwnShard()
+	{
+		using TempProject project = TempProject.Create( ShardingCases.Configuration( VersionPrefixShardingStrategy.StrategyName ) );
+		using FileSystemProjectStores stores = project.Open();
+
+		// '2026' shards under '2026', so its finalized folder is a child of its unfinalized one
+		stores.InfoStore.AddRelease( new ReleaseDefinition( "2026", "", "" ), TestData.Context() );
+
+		Assert.True( File.Exists( Path.Combine( project.Root, "releases", "2026", "release.json" ) ) );
+
+		stores.InfoStore.SetReleaseContext( "2026", TestData.Context() );
+
+		Assert.True( File.Exists( Path.Combine( project.Root, "releases", "2026", "2026", "release.json" ) ) );
+		Assert.False( File.Exists( Path.Combine( project.Root, "releases", "2026", "release.json" ) ) );
+		Assert.NotNull( stores.InfoStore.GetRelease( "2026" )!.Finalized );
+		Assert.Equal(
+			["2026"],
+			stores.InfoStore.ListReleases( new ReleaseSearchCriteria( Finalized: true ) )
+					.Select( x => x.Definition.Name ).ToArray() );
 	}
 
 	[Theory]

@@ -36,8 +36,8 @@ public sealed class ProjectInitCommand( IAnsiConsole console ) : Command<Project
 			string delimiter = string.IsNullOrEmpty( settings.ShardByPrefix.Value ) ? "." : settings.ShardByPrefix.Value;
 
 			sharding = new ShardingConfiguration(
-				NamePrefixShardingStrategy.StrategyName,
-				new Dictionary<string, string> { [NamePrefixShardingStrategy.DelimiterOption] = delimiter } );
+				VersionPrefixShardingStrategy.StrategyName,
+				new Dictionary<string, string> { [VersionPrefixShardingStrategy.DelimiterOption] = delimiter } );
 		}
 
 		FileSystemProjectStores.Initialize(

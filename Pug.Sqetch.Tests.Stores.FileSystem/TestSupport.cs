@@ -12,15 +12,15 @@ public static class TestData
 
 public static class ShardingCases
 {
-	public static TheoryData<string> Names => new ( FlatShardingStrategy.StrategyName, NamePrefixShardingStrategy.StrategyName );
+	public static TheoryData<string> Names => new ( FlatShardingStrategy.StrategyName, VersionPrefixShardingStrategy.StrategyName );
 
 	public static ShardingConfiguration Configuration( string name )
 		=> name switch
 		{
 			FlatShardingStrategy.StrategyName => new ShardingConfiguration( FlatShardingStrategy.StrategyName ),
-			NamePrefixShardingStrategy.StrategyName => new ShardingConfiguration(
-				NamePrefixShardingStrategy.StrategyName,
-				new Dictionary<string, string> { [NamePrefixShardingStrategy.DelimiterOption] = "." } ),
+			VersionPrefixShardingStrategy.StrategyName => new ShardingConfiguration(
+				VersionPrefixShardingStrategy.StrategyName,
+				new Dictionary<string, string> { [VersionPrefixShardingStrategy.DelimiterOption] = "." } ),
 			_ => throw new ArgumentOutOfRangeException( nameof(name) )
 		};
 }

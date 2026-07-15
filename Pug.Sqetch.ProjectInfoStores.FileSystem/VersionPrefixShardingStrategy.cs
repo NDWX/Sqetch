@@ -1,25 +1,25 @@
 namespace Pug.Sqetch.Stores.FileSystem;
 
 /// <summary>
-/// Shards releases by the leading segment of the release name, e.g. with the default '.'
-/// delimiter release '2026.07' lives in 'releases/2026/2026.07'. Names without the
-/// delimiter shard under their own full name.
+/// Shards finalized releases by the leading segment of the release name, e.g. with the
+/// default '.' delimiter finalized release '2026.07' lives in 'releases/2026/2026.07'.
+/// Names without the delimiter shard under their own full name.
 /// </summary>
-public sealed class NamePrefixShardingStrategy : IReleaseShardingStrategy
+public sealed class VersionPrefixShardingStrategy : IReleaseShardingStrategy
 {
-	public const string StrategyName = "name-prefix";
+	public const string StrategyName = "version-prefix";
 	public const string DelimiterOption = "delimiter";
 
 	private readonly string _delimiter;
 
-	public NamePrefixShardingStrategy( string delimiter = "." )
+	public VersionPrefixShardingStrategy( string delimiter = "." )
 	{
 		ArgumentException.ThrowIfNullOrEmpty( delimiter );
 
 		_delimiter = delimiter;
 	}
 
-	public static NamePrefixShardingStrategy FromOptions( IReadOnlyDictionary<string, string>? options )
+	public static VersionPrefixShardingStrategy FromOptions( IReadOnlyDictionary<string, string>? options )
 		=> new ( options is not null && options.TryGetValue( DelimiterOption, out string? delimiter ) ? delimiter : "." );
 
 	public int ShardDepth => 1;

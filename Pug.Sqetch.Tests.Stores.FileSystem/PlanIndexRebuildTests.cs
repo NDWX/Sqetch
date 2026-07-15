@@ -18,6 +18,9 @@ public class PlanIndexRebuildTests
 			stores.InfoStore.AddRelease( new ReleaseDefinition( "2026.07", "", "" ), TestData.Context() );
 			stores.InfoStore.AddReleasePlan( "2026.07", "base", TestData.Context() );
 			stores.InfoStore.AddReleasePlan( "2026.07", "customer-email", TestData.Context() );
+
+			// finalize so the rebuild also has to find plans inside a sharded release folder
+			stores.InfoStore.SetReleaseContext( "2026.07", TestData.Context() );
 		}
 
 		string indexFile = Path.Combine( project.Root, "plan-index" );

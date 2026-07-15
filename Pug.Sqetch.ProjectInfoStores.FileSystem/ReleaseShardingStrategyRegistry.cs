@@ -13,7 +13,7 @@ public class ReleaseShardingStrategyRegistry
 	public ReleaseShardingStrategyRegistry()
 	{
 		Register( FlatShardingStrategy.StrategyName, _ => new FlatShardingStrategy() );
-		Register( NamePrefixShardingStrategy.StrategyName, NamePrefixShardingStrategy.FromOptions );
+		Register( VersionPrefixShardingStrategy.StrategyName, VersionPrefixShardingStrategy.FromOptions );
 	}
 
 	public void Register( string name, Func<IReadOnlyDictionary<string, string>?, IReleaseShardingStrategy> factory )

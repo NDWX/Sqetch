@@ -586,6 +586,14 @@ public class Project : IProject
 
 			EnsureDependencyDeclaredIfNotFirst( definition );
 
+			if( !string.IsNullOrWhiteSpace( definition.Dependency ) )
+			{
+				ProjectRelease dependency = _infoStore.GetRelease( definition.Dependency )!;
+
+				if (!_infoStore.ReleaseExists(definition.Dependency))
+					throw new UnknownReleaseException(definition.Dependency);
+			}
+
 			CreateRelease( definition,  includedPlans);
 		}
 		finally

@@ -234,6 +234,7 @@ public class CliTests : IDisposable
 
 		Assert.Contains( "(unreleased)", Run( "plan", "--name", "undecided" ).Output );
 		Assert.Equal( "", Run( "release", "list" ).Output );
-		Assert.False( Directory.Exists( Path.Combine( _root, "releases", "2026", "2026.09" ) ) );
+		// unfinalized releases live unsharded directly under 'releases'
+		Assert.False( Directory.Exists( Path.Combine( _root, "releases", "2026.09" ) ) );
 	}
 }

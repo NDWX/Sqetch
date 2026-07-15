@@ -10,7 +10,7 @@ public class ShardingTests
 	[InlineData( "hotfix", "hotfix" )]
 	public void NamePrefixStrategyShardsByFirstSegment( string release, string shard )
 	{
-		NamePrefixShardingStrategy strategy = new ();
+		VersionPrefixShardingStrategy strategy = new ();
 
 		Assert.Equal( shard, strategy.GetShardPath( release ) );
 	}
@@ -25,7 +25,7 @@ public class ShardingTests
 	[InlineData( "2026", "3", false )]
 	public void NamePrefixStrategyNarrowsCandidateShards( string shard, string prefix, bool candidate )
 	{
-		NamePrefixShardingStrategy strategy = new ();
+		VersionPrefixShardingStrategy strategy = new ();
 
 		Assert.Equal( candidate, strategy.MayContainMatch( shard, prefix ) );
 	}
@@ -43,10 +43,20 @@ public class ShardingTests
 		{
 			stores.InfoStore.AddRelease( new ReleaseDefinition( "alpha", "", "" ), TestData.Context() );
 
-			Assert.True( File.Exists( Path.Combine( project.Root, "releases", "5", "alpha", "release.json" ) ) );
+			// sharding only applies to finalized releases
+			Assert.True( File.Exists( Path.Combine( project.Root, "releases", "alpha", "release.json" ) ) );
 			Assert.Equal(
 				["alpha"],
 				stores.InfoStore.ListReleases( new ReleaseSearchCriteria() ).Select( x => x.Definition.Name ).ToArray() );
+
+			stores.InfoStore.SetReleaseContext( "alpha", TestData.Context() );
+
+			Assert.True( File.Exists( Path.Combine( project.Root, "releases", "5", "alpha", "release.json" ) ) );
+			Assert.False( Directory.Exists( Path.Combine( project.Root, "releases", "alpha" ) ) );
+			Assert.Equal(
+				["alpha"],
+				stores.InfoStore.ListReleases( new ReleaseSearchCriteria( Finalized: true ) )
+						.Select( x => x.Definition.Name ).ToArray() );
 		}
 
 		// opening without the custom registration must fail loudly, not misplace files

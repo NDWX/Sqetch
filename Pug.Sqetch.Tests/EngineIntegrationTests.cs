@@ -12,7 +12,7 @@ public class EngineIntegrationTests
 	[Fact]
 	public void FullReleaseLifecycle()
 	{
-		using TempProject temp = TempProject.Create( ShardingCases.Configuration( NamePrefixShardingStrategy.StrategyName ) );
+		using TempProject temp = TempProject.Create( ShardingCases.Configuration( VersionPrefixShardingStrategy.StrategyName ) );
 		using FileSystemProjectStores stores = temp.Open();
 		using IProject project = ProjectFactory.Create(
 			stores.InfoStore, stores.ScriptsStore,
@@ -57,7 +57,7 @@ public class EngineIntegrationTests
 	[Fact]
 	public void ReleaseDependencyIsRequiredExceptForTheFirstRelease()
 	{
-		using TempProject temp = TempProject.Create( ShardingCases.Configuration( NamePrefixShardingStrategy.StrategyName ) );
+		using TempProject temp = TempProject.Create( ShardingCases.Configuration( VersionPrefixShardingStrategy.StrategyName ) );
 		using FileSystemProjectStores stores = temp.Open();
 		using IProject project = ProjectFactory.Create(
 			stores.InfoStore, stores.ScriptsStore,

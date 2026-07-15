@@ -4,8 +4,9 @@ namespace Pug.Sqetch.Stores.FileSystem;
 /// Git-friendly file-system implementation of <see cref="IProjectInfoStore"/>. Unreleased
 /// plans live under 'plans/'; adding a plan to a release physically moves its folder under
 /// the release (so git shows the assignment as a rename and the root 'plans/' folder only
-/// ever holds in-flight work), and the committed 'plan-index' file locates any plan ever
-/// created without scanning release folders.
+/// ever holds in-flight work); finalizing a release moves the release folder from the top
+/// of 'releases/' into its shard, and the committed 'plan-index' file locates any plan
+/// ever created without scanning release folders.
 /// </summary>
 public sealed class FileSystemProjectInfoStore : IProjectInfoStore
 {
@@ -271,9 +272,39 @@ public sealed class FileSystemProjectInfoStore : IProjectInfoStore
 		if( document.Finalized is not null )
 			throw new ReleaseFinalizedException();
 
+		string source = _session.Paths.ReleaseDirectory( document.Name );
+
 		JsonFiles.Write(
-			_session.Paths.ReleaseFile( document.Name ),
+			Path.Combine( source, FileNames.ReleaseFile ),
 			document with { Finalized = ActionDocument.From( releaseContext ) } );
+
+		MoveToFinalizedLocation( document.Name, source );
+	}
+
+	// finalizing a release moves its folder into the shard; unfinalized releases live
+	// unsharded because there are only ever a few of them at a time
+	private void MoveToFinalizedLocation( string release, string source )
+	{
+		string target = _session.Paths.FinalizedReleaseDirectory( release );
+
+		if( string.Equals( target, source, StringComparison.Ordinal ) )
+			return;
+
+		// a release named like its own shard finalizes into a child of its current folder,
+		// which Directory.Move cannot do directly; hop through a temporary sibling
+		if( ( target + Path.DirectorySeparatorChar ).StartsWith( source + Path.DirectorySeparatorChar, StringComparison.Ordinal ) )
+		{
+			string temporary = source + ".finalizing";
+
+			Directory.Move( source, temporary );
+			Directory.CreateDirectory( Path.GetDirectoryName( target )! );
+			Directory.Move( temporary, target );
+
+			return;
+		}
+
+		Directory.CreateDirectory( Path.GetDirectoryName( target )! );
+		Directory.Move( source, target );
 	}
 
 	public IEnumerable<ProjectRelease> GetReleaseDependants( string release )

@@ -58,8 +58,35 @@ public class GitLegibilityTests
 
 		stores.InfoStore.SetReleaseContext( "2026.07", TestData.Context() );
 
+		// under flat sharding the release does not move, so finalization is a one-file edit
 		diff = Git.StagedChanges( project.Root );
 		Assert.Equal( "M\treleases/2026.07/release.json", diff.Trim() );
 		Git.Commit( project.Root, "finalize release 2026.07" );
+	}
+
+	[Fact]
+	public void FinalizationMovesTheReleaseIntoItsShard()
+	{
+		using TempProject project = TempProject.Create( ShardingCases.Configuration( VersionPrefixShardingStrategy.StrategyName ) );
+		using FileSystemProjectStores stores = project.Open();
+
+		Git.Run( project.Root, "init" );
+
+		stores.InfoStore.AddPlan( new ObjectDefinition( "customer-email", "" ), [], TestData.Context() );
+		stores.InfoStore.AddRelease( new ReleaseDefinition( "2026.07", "", "" ), TestData.Context() );
+		stores.InfoStore.AddReleasePlan( "2026.07", "customer-email", TestData.Context() );
+		Git.Commit( project.Root, "prepare release 2026.07" );
+
+		stores.InfoStore.SetReleaseContext( "2026.07", TestData.Context() );
+
+		string diff = Git.StagedChanges( project.Root );
+
+		// the release tree renames into its shard; only release.json itself changed content
+		Assert.Matches(
+			@"R100\treleases/2026\.07/plans/customer-email/plan\.json\treleases/2026/2026\.07/plans/customer-email/plan\.json",
+			diff );
+		Assert.Matches(
+			@"R\d+\treleases/2026\.07/release\.json\treleases/2026/2026\.07/release\.json",
+			diff );
 	}
 }
