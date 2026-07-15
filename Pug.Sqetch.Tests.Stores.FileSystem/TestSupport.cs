@@ -1,9 +1,9 @@
 using System.Diagnostics;
 using Pug.Sqetch.Stores.FileSystem;
 
-namespace Pug.Sqetch.Tests;
+namespace Pug.Sqetch.Tests.Stores.FileSystem;
 
-internal static class TestData
+public static class TestData
 {
 	public static readonly UserInfo User = new ( "tester", "tester@example.com" );
 
@@ -25,7 +25,7 @@ public static class ShardingCases
 		};
 }
 
-internal sealed class TempProject : IDisposable
+public sealed class TempProject : IDisposable
 {
 	private TempProject( string root )
 	{
@@ -61,7 +61,7 @@ internal sealed class TempProject : IDisposable
 	}
 }
 
-internal static class Git
+public static class Git
 {
 	public static string Run( string workingDirectory, params string[] arguments )
 	{

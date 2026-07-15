@@ -1,6 +1,6 @@
 using Pug.Sqetch.Stores.FileSystem;
 
-namespace Pug.Sqetch.Tests;
+namespace Pug.Sqetch.Tests.Stores.FileSystem;
 
 /// <summary>
 /// Verifies the design goal end-to-end: every business event shows up in git as the

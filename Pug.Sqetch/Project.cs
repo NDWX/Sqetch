@@ -286,8 +286,12 @@ public class Project : IProject
 			IDictionary<string, ProjectElement> planSteps = _infoStore.GetSteps( plan );
 
 			tx.Complete();
-			
-			return planSteps.Values;
+
+			return DependencyOrdering.Sort(
+				planSteps.Values,
+				x => x.Definition.Name,
+				x => ( x.Definition as StepDefinition )?.Dependencies ?? [],
+				x => x.Registration.Timestamp );
 		}
 		finally
 		{
@@ -578,12 +582,15 @@ public class Project : IProject
 		}
 	}
 
-	public IEnumerable<ProjectRelease> GetReleases(
-		string prefix = "", bool released = false, 
-		Range<DateTime>? createTimestamp = null, Range<DateTime>? finalizeTimestamp = null
-	)
+	public IEnumerable<ProjectRelease> GetReleases( ReleaseSearchCriteria criteria )
 	{
-		return _infoStore.GetReleases( prefix, released, createTimestamp, finalizeTimestamp );
+		ArgumentNullException.ThrowIfNull( criteria, nameof(criteria) );
+
+		return DependencyOrdering.Sort(
+			_infoStore.ListReleases( criteria ),
+			x => x.Definition.Name,
+			x => string.IsNullOrEmpty( x.Definition.Dependency ) ? [] : [x.Definition.Dependency],
+			x => x.Registration.Timestamp );
 	}
 
 	public IEnumerable<ProjectRelease> GetReleaseDependants( string release )
@@ -660,14 +667,12 @@ public class Project : IProject
 		ArgumentException.ThrowIfNullOrWhiteSpace( release, nameof(release) );
 	}
 
-	public IEnumerable<ProjectElement> GetPlans( string release )
+	public IEnumerable<ProjectPlan> GetPlans( PlanSearchCriteria criteria )
 	{
-		ValidateReleaseParameter( release );
-		
+		ArgumentNullException.ThrowIfNull( criteria, nameof(criteria) );
+
 		bool releasesLocked = false;
 
-		ActionContext actionContext = GetActionContext();
-		
 		_plansSemaphore.Wait();
 
 		using TransactionScope tx = new ();
@@ -675,27 +680,51 @@ public class Project : IProject
 		try
 		{
 			_releasesSemaphore.Wait();
-			
+
 			releasesLocked = true;
 
-			ProjectRelease? projectRelease = _infoStore.GetRelease( release );
+			// the store returns released plans grouped by release in release-chronological
+			// order; ordering the plans within each group is this layer's responsibility
+			List<ProjectPlan> plans = [];
 
-			if( projectRelease is null )
-				throw new UnknownReleaseException();
+			foreach( List<ProjectPlan> releaseGroup in GroupByRelease( _infoStore.ListPlans( criteria ) ) )
+				plans.AddRange(
+					DependencyOrdering.Sort(
+						releaseGroup,
+						x => x.Definition.Name,
+						x => ( x.Definition as PlanDefinition )?.Dependencies ?? [],
+						x => x.Registration.Timestamp ) );
 
-			IEnumerable<ProjectElement> existingPlans = _infoStore.GetReleasePlans( release );
-			
 			tx.Complete();
 
-			return existingPlans;
+			return plans;
 		}
 		finally
 		{
 			if(releasesLocked)
 				_releasesSemaphore.Release();
-			
+
 			_plansSemaphore.Release();
 		}
+	}
+
+	private static IEnumerable<List<ProjectPlan>> GroupByRelease( IEnumerable<ProjectPlan> plans )
+	{
+		List<ProjectPlan> group = [];
+
+		foreach( ProjectPlan plan in plans )
+		{
+			if( group.Count > 0 && !string.Equals( group[^1].Release, plan.Release, StringComparison.OrdinalIgnoreCase ) )
+			{
+				yield return group;
+				group = [];
+			}
+
+			group.Add( plan );
+		}
+
+		if( group.Count > 0 )
+			yield return group;
 	}
 
 	public void RemovePlanFromRelease( string release, string plan, bool includeDependants = false )
@@ -790,7 +819,9 @@ public class Project : IProject
 			{
 				_infoStore.DeleteReleasePlan( release,  plan.Definition.Name, actionContext );
 			}
-			
+
+			_infoStore.DeleteRelease( release );
+
 			tx.Complete();
 		}
 		finally
@@ -804,14 +835,16 @@ public class Project : IProject
 
 	private void EnsureNoOpenReleaseDependencies(string release)
 	{
-		IEnumerable<ProjectRelease> openReleases = _infoStore.GetReleases( released: false );
+		IEnumerable<ProjectRelease> openReleases = _infoStore.ListReleases( new ReleaseSearchCriteria() );
 
+		// finalizing requires every release this one (transitively) depends on to be
+		// finalized already; open dependants are expected and do not block
 		IEnumerable<ProjectRelease> releaseDependencies =
 			from openRelease in openReleases
 			where !openRelease.Definition.Name.Equals( release, StringComparison.InvariantCulture ) &&
 				_releaseDependencyDeterminator.DetermineDependencyRelationship(
-					openRelease.Definition.Name,
-					release
+					release,
+					openRelease.Definition.Name
 				) == DependencyRelationship.Dependant
 			select openRelease;
 

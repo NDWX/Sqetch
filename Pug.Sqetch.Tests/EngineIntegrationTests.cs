@@ -1,4 +1,5 @@
 using Pug.Sqetch.Stores.FileSystem;
+using Pug.Sqetch.Tests.Stores.FileSystem;
 
 namespace Pug.Sqetch.Tests;
 
@@ -26,7 +27,7 @@ public class EngineIntegrationTests
 
 		project.CreateRelease( new ReleaseDefinition( "2026.07", "July release", "" ), ["customer-email", "customer-index"] );
 
-		Assert.Equal( 2, project.GetPlans( "2026.07" ).Count() );
+		Assert.Equal( 2, project.GetPlans( new PlanSearchCriteria( Release: "2026.07" ) ).Count() );
 
 		// removing a plan that another release member depends on must be refused
 		Assert.Throws<AbandonedPlanDependantsException>(

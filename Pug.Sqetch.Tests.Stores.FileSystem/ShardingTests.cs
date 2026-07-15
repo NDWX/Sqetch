@@ -1,6 +1,6 @@
 using Pug.Sqetch.Stores.FileSystem;
 
-namespace Pug.Sqetch.Tests;
+namespace Pug.Sqetch.Tests.Stores.FileSystem;
 
 public class ShardingTests
 {
@@ -44,7 +44,9 @@ public class ShardingTests
 			stores.InfoStore.AddRelease( new ReleaseDefinition( "alpha", "", "" ), TestData.Context() );
 
 			Assert.True( File.Exists( Path.Combine( project.Root, "releases", "5", "alpha", "release.json" ) ) );
-			Assert.Equal( ["alpha"], stores.InfoStore.GetReleases().Select( x => x.Definition.Name ).ToArray() );
+			Assert.Equal(
+				["alpha"],
+				stores.InfoStore.ListReleases( new ReleaseSearchCriteria() ).Select( x => x.Definition.Name ).ToArray() );
 		}
 
 		// opening without the custom registration must fail loudly, not misplace files

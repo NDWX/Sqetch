@@ -4,7 +4,7 @@ namespace Pug.Sqetch.Stores.FileSystem;
 /// Single owner of the project's on-disk layout: every path is constructed here, and
 /// release paths are delegated to the configured <see cref="IReleaseShardingStrategy"/>.
 /// </summary>
-internal sealed class ProjectPaths
+public sealed class ProjectPaths
 {
 	private readonly IReleaseShardingStrategy _sharding;
 

@@ -20,6 +20,12 @@ public sealed class FileSystemProjectStores : IDisposable
 
 	public IScriptsStore ScriptsStore { get; }
 
+	/// <summary>
+	/// The project's on-disk layout, for hosts that deliberately couple to the file-system
+	/// store and need to surface locations (e.g. the CLI printing a created plan's path).
+	/// </summary>
+	public ProjectPaths Paths => _session.Paths;
+
 	public static FileSystemProjectStores Open( string path, ReleaseShardingStrategyRegistry? shardingStrategies = null )
 		=> new ( new ProjectStoreSession( path, shardingStrategies ?? new ReleaseShardingStrategyRegistry() ) );
 

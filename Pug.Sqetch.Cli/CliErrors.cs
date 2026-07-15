@@ -1,0 +1,25 @@
+using Pug.Sqetch.Stores.FileSystem;
+
+namespace Pug.Sqetch;
+
+internal static class CliErrors
+{
+	public static string Describe( Exception exception )
+		=> exception switch
+		{
+			UnknownUserException => "user identity not configured; run 'sqetch project user <name> <email> [--global]'",
+			DuplicatePlanNameException => "a plan with this name already exists",
+			DuplicateStepNameException => "a step with this name already exists in the plan",
+			DuplicateReleaseNameException => "a release with this name already exists",
+			UnknownPlanException unknownPlan => $"plan '{unknownPlan.Name}' does not exist",
+			UnknownReleaseException => "release does not exist",
+			ReleaseFinalizedException => "the release is finalized and can no longer be changed",
+			PlanFinalizedException => "the plan belongs to a finalized release and can no longer be changed",
+			EmptyReleaseException => "a release without plans cannot be finalized",
+			AbandonedPlanDependantsException =>
+				"other plans in the release depend on this plan (use --with-dependants to remove them too)",
+			IncompleteDefinitionException => "the definition is missing a name",
+			ProjectStoreException store => store.Message,
+			_ => exception.Message
+		};
+}

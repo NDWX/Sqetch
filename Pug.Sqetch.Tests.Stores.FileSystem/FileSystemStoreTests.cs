@@ -1,6 +1,6 @@
 using Pug.Sqetch.Stores.FileSystem;
 
-namespace Pug.Sqetch.Tests;
+namespace Pug.Sqetch.Tests.Stores.FileSystem;
 
 public class FileSystemStoreTests
 {
@@ -191,15 +191,16 @@ public class FileSystemStoreTests
 
 		Assert.Equal(
 			["2026.07"],
-			stores.InfoStore.GetReleases( "2026" ).Select( x => x.Definition.Name ).Order().ToArray() );
+			stores.InfoStore.ListReleases( new ReleaseSearchCriteria( "2026" ) ).Select( x => x.Definition.Name ).Order().ToArray() );
 
 		Assert.Equal(
 			["2026.01"],
-			stores.InfoStore.GetReleases( "2026", released: true ).Select( x => x.Definition.Name ).ToArray() );
+			stores.InfoStore.ListReleases( new ReleaseSearchCriteria( "2026", Finalized: true ) )
+					.Select( x => x.Definition.Name ).ToArray() );
 
 		Assert.Equal(
 			["2025.12", "2026.07"],
-			stores.InfoStore.GetReleases().Select( x => x.Definition.Name ).Order().ToArray() );
+			stores.InfoStore.ListReleases( new ReleaseSearchCriteria() ).Select( x => x.Definition.Name ).Order().ToArray() );
 
 		Assert.Equal(
 			["2026.07"],

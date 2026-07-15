@@ -42,14 +42,30 @@ public interface IProjectInfoStore : IDisposable
 
 	bool VersionExists( string name );
 
-	IEnumerable<ProjectRelease> GetReleases( 
-		string prefix = "", bool released = false, 
-		Range<DateTime>? createTimestamp = null, Range<DateTime>? finalizeTimestamp = null );
+	/// <summary>
+	/// Plans matching <paramref name="criteria"/>. Released plans are returned grouped by
+	/// release, with the groups in release-chronological (dependency-chain) order; the order
+	/// of plans within a group, and of unreleased plans, is unspecified — chronological
+	/// ordering of individual plans is the business layer's responsibility.
+	/// </summary>
+	IEnumerable<ProjectPlan> ListPlans( PlanSearchCriteria criteria );
+
+	/// <summary>
+	/// Releases matching <paramref name="criteria"/>, in no particular order — chronological
+	/// ordering is the business layer's responsibility.
+	/// </summary>
+	IEnumerable<ProjectRelease> ListReleases( ReleaseSearchCriteria criteria );
 
 	ProjectRelease? GetRelease(string name);
 
 	void AddRelease( ObjectDefinition definition, ActionContext context );
-	
+
+	/// <summary>
+	/// Removes an open, empty release. The release must not be finalized and must no longer
+	/// contain plans.
+	/// </summary>
+	void DeleteRelease( string name );
+
 	void SetReleaseContext( string release, ActionContext releaseContext );
 
 	IEnumerable<ProjectRelease> GetReleaseDependants( string release );

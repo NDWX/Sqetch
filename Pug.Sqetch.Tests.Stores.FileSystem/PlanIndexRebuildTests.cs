@@ -1,6 +1,6 @@
 using Pug.Sqetch.Stores.FileSystem;
 
-namespace Pug.Sqetch.Tests;
+namespace Pug.Sqetch.Tests.Stores.FileSystem;
 
 public class PlanIndexRebuildTests
 {

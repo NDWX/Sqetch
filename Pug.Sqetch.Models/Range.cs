@@ -13,6 +13,7 @@ public static class RangeExtensions
 {
 	public static bool IsWithin<T>( this T other, Range<T> range ) where T : IComparable<T>
 	{
-		return range.Start.CompareTo( other ) > -1 &&  range.End.CompareTo( other ) < 1;
+		// within = Start <= other <= End
+		return range.Start.CompareTo( other ) < 1 && range.End.CompareTo( other ) > -1;
 	}
 }

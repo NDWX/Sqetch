@@ -1,18 +1,22 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Pug.Sqetch", "Pug.Sqetch\Pug.Sqetch.csproj", "{EBB0E727-3AA2-42FA-9D36-5BF6E0DCD401}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Pug.Sqetch", "Pug.Sqetch/Pug.Sqetch.csproj", "{EBB0E727-3AA2-42FA-9D36-5BF6E0DCD401}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Pug.Sqetch.Cli", "Pug.Sqetch.Cli\Pug.Sqetch.Cli.csproj", "{8F0AE862-6763-4DE1-80BF-0A9CB21E5289}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Pug.Sqetch.Cli", "Pug.Sqetch.Cli/Pug.Sqetch.Cli.csproj", "{8F0AE862-6763-4DE1-80BF-0A9CB21E5289}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Pug.Sqetch.Abstractions", "Pug.Sqetch.Abstractions\Pug.Sqetch.Abstractions.csproj", "{2388F187-24E7-42C6-8547-78584A485838}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Pug.Sqetch.Abstractions", "Pug.Sqetch.Abstractions/Pug.Sqetch.Abstractions.csproj", "{2388F187-24E7-42C6-8547-78584A485838}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Pug.Sqetch.Models", "Pug.Sqetch.Models\Pug.Sqetch.Models.csproj", "{EB1C46A5-164B-405F-8705-69069A1C10B3}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Pug.Sqetch.Models", "Pug.Sqetch.Models/Pug.Sqetch.Models.csproj", "{EB1C46A5-164B-405F-8705-69069A1C10B3}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Pug.Sqetch.ProjectInfoStore.Abstractions", "Pug.Sqetch.ProjectInfoStore.Abstractions\Pug.Sqetch.ProjectInfoStore.Abstractions.csproj", "{7167A089-9990-4A96-9D2F-0700B55CBE81}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Pug.Sqetch.ProjectInfoStore.Abstractions", "Pug.Sqetch.ProjectInfoStore.Abstractions/Pug.Sqetch.ProjectInfoStore.Abstractions.csproj", "{7167A089-9990-4A96-9D2F-0700B55CBE81}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sqetch.Stores.FileSystemProjectInfoStore", "Sqetch.Stores.FileSystemProjectInfoStore\Sqetch.Stores.FileSystemProjectInfoStore.csproj", "{CB22162B-2706-402D-8FF3-353F4CECA9E9}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Pug.Sqetch.ProjectInfoStores.FileSystem", "Pug.Sqetch.ProjectInfoStores.FileSystem\Pug.Sqetch.ProjectInfoStores.FileSystem.csproj", "{CB22162B-2706-402D-8FF3-353F4CECA9E9}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Pug.Sqetch.Tests", "Pug.Sqetch.Tests\Pug.Sqetch.Tests.csproj", "{7AC8B27B-0FE0-4025-9346-950B830A2F51}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Pug.Sqetch.Tests", "Pug.Sqetch.Tests/Pug.Sqetch.Tests.csproj", "{7AC8B27B-0FE0-4025-9346-950B830A2F51}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Pug.Sqetch.Tests.Stores.FileSystem", "Pug.Sqetch.Tests.Stores.FileSystem/Pug.Sqetch.Tests.Stores.FileSystem.csproj", "{97B9F2C8-4A36-4BDD-A4AD-67A4A49C62E8}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Pug.Sqetch.Tests.Cli", "Pug.Sqetch.Tests.Cli/Pug.Sqetch.Tests.Cli.csproj", "{DBE7AAB8-C937-4508-B83B-58FBC1E131ED}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -108,6 +112,30 @@ Global
 		{7AC8B27B-0FE0-4025-9346-950B830A2F51}.Release|x64.Build.0 = Release|Any CPU
 		{7AC8B27B-0FE0-4025-9346-950B830A2F51}.Release|x86.ActiveCfg = Release|Any CPU
 		{7AC8B27B-0FE0-4025-9346-950B830A2F51}.Release|x86.Build.0 = Release|Any CPU
+		{97B9F2C8-4A36-4BDD-A4AD-67A4A49C62E8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{97B9F2C8-4A36-4BDD-A4AD-67A4A49C62E8}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{97B9F2C8-4A36-4BDD-A4AD-67A4A49C62E8}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{97B9F2C8-4A36-4BDD-A4AD-67A4A49C62E8}.Debug|x64.Build.0 = Debug|Any CPU
+		{97B9F2C8-4A36-4BDD-A4AD-67A4A49C62E8}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{97B9F2C8-4A36-4BDD-A4AD-67A4A49C62E8}.Debug|x86.Build.0 = Debug|Any CPU
+		{97B9F2C8-4A36-4BDD-A4AD-67A4A49C62E8}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{97B9F2C8-4A36-4BDD-A4AD-67A4A49C62E8}.Release|Any CPU.Build.0 = Release|Any CPU
+		{97B9F2C8-4A36-4BDD-A4AD-67A4A49C62E8}.Release|x64.ActiveCfg = Release|Any CPU
+		{97B9F2C8-4A36-4BDD-A4AD-67A4A49C62E8}.Release|x64.Build.0 = Release|Any CPU
+		{97B9F2C8-4A36-4BDD-A4AD-67A4A49C62E8}.Release|x86.ActiveCfg = Release|Any CPU
+		{97B9F2C8-4A36-4BDD-A4AD-67A4A49C62E8}.Release|x86.Build.0 = Release|Any CPU
+		{DBE7AAB8-C937-4508-B83B-58FBC1E131ED}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{DBE7AAB8-C937-4508-B83B-58FBC1E131ED}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{DBE7AAB8-C937-4508-B83B-58FBC1E131ED}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{DBE7AAB8-C937-4508-B83B-58FBC1E131ED}.Debug|x64.Build.0 = Debug|Any CPU
+		{DBE7AAB8-C937-4508-B83B-58FBC1E131ED}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{DBE7AAB8-C937-4508-B83B-58FBC1E131ED}.Debug|x86.Build.0 = Debug|Any CPU
+		{DBE7AAB8-C937-4508-B83B-58FBC1E131ED}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{DBE7AAB8-C937-4508-B83B-58FBC1E131ED}.Release|Any CPU.Build.0 = Release|Any CPU
+		{DBE7AAB8-C937-4508-B83B-58FBC1E131ED}.Release|x64.ActiveCfg = Release|Any CPU
+		{DBE7AAB8-C937-4508-B83B-58FBC1E131ED}.Release|x64.Build.0 = Release|Any CPU
+		{DBE7AAB8-C937-4508-B83B-58FBC1E131ED}.Release|x86.ActiveCfg = Release|Any CPU
+		{DBE7AAB8-C937-4508-B83B-58FBC1E131ED}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

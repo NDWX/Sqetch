@@ -207,26 +207,23 @@ public sealed class FileSystemProjectInfoStore : IProjectInfoStore
 
 	public bool VersionExists( string name ) => _session.ReadRelease( name ) is not null;
 
-	public IEnumerable<ProjectRelease> GetReleases(
-		string prefix = "", bool released = false,
-		Range<DateTime>? createTimestamp = null, Range<DateTime>? finalizeTimestamp = null )
+	public IEnumerable<ProjectPlan> ListPlans( PlanSearchCriteria criteria )
+	{
+		if( criteria.Release is not null )
+			return ListReleasePlans( criteria.Release, criteria );
+
+		if( criteria.Released || criteria.ReleaseFinalizeTimestamp is not null )
+			return ListReleasedPlans( criteria );
+
+		return ListUnreleasedPlans( criteria );
+	}
+
+	public IEnumerable<ProjectRelease> ListReleases( ReleaseSearchCriteria criteria )
 	{
 		List<ProjectRelease> releases = [];
 
-		foreach( ReleaseDocument document in EnumerateReleaseDocuments( prefix ) )
-		{
-			if( released != document.Finalized is not null )
-				continue;
-
-			if( createTimestamp is not null && !document.Registration.Timestamp.IsWithin( createTimestamp ) )
-				continue;
-
-			if( finalizeTimestamp is not null &&
-				( document.Finalized is null || !document.Finalized.Timestamp.IsWithin( finalizeTimestamp ) ) )
-				continue;
-
+		foreach( ReleaseDocument document in MatchReleaseDocuments( criteria ) )
 			releases.Add( document.ToModel() );
-		}
 
 		return releases;
 	}
@@ -245,6 +242,23 @@ public sealed class FileSystemProjectInfoStore : IProjectInfoStore
 		JsonFiles.Write(
 			_session.Paths.ReleaseFile( definition.Name ),
 			new ReleaseDocument( definition.Name, definition.Description, dependency, ActionDocument.From( context ), null ) );
+	}
+
+	public void DeleteRelease( string name )
+	{
+		ReleaseDocument document = _session.RequireRelease( name );
+
+		if( document.Finalized is not null )
+			throw new ReleaseFinalizedException();
+
+		string plansDirectory = _session.Paths.ReleasePlansDirectory( document.Name );
+
+		if( Directory.Exists( plansDirectory ) &&
+			Directory.EnumerateDirectories( plansDirectory )
+					.Any( x => File.Exists( Path.Combine( x, FileNames.PlanFile ) ) ) )
+			throw new ProjectStoreException( $"Release '{document.Name}' still contains plans." );
+
+		Directory.Delete( _session.Paths.ReleaseDirectory( document.Name ), recursive: true );
 	}
 
 	public void SetReleaseContext( string release, ActionContext releaseContext )
@@ -399,4 +413,144 @@ public sealed class FileSystemProjectInfoStore : IProjectInfoStore
 		foreach( string releaseDirectory in _session.Paths.EnumerateReleaseDirectories( prefix ) )
 			yield return JsonFiles.Read<ReleaseDocument>( Path.Combine( releaseDirectory, FileNames.ReleaseFile ) );
 	}
+
+	private IEnumerable<ReleaseDocument> MatchReleaseDocuments( ReleaseSearchCriteria criteria )
+	{
+		// a finalize window or finalize user only makes sense against finalized releases
+		bool finalized = criteria.Finalized || criteria.FinalizeTimestamp is not null || criteria.FinalizeUser is not null;
+
+		foreach( ReleaseDocument document in EnumerateReleaseDocuments( criteria.Prefix ) )
+		{
+			if( finalized != document.Finalized is not null )
+				continue;
+
+			if( criteria.CreateTimestamp is not null && !document.Registration.Timestamp.IsWithin( criteria.CreateTimestamp ) )
+				continue;
+
+			if( criteria.FinalizeTimestamp is not null && !document.Finalized!.Timestamp.IsWithin( criteria.FinalizeTimestamp ) )
+				continue;
+
+			if( !MatchesUser( document.Registration, criteria.CreateUser ) )
+				continue;
+
+			if( !MatchesUser( document.Finalized, criteria.FinalizeUser ) )
+				continue;
+
+			yield return document;
+		}
+	}
+
+	private IEnumerable<ProjectPlan> ListUnreleasedPlans( PlanSearchCriteria criteria )
+	{
+		List<ProjectPlan> plans = [];
+
+		foreach( PlanIndexEntry entry in _session.PlanIndex.Entries.Where( x => x.Release.Length == 0 ) )
+		{
+			PlanDocument document = ReadPlanDocument( entry );
+
+			if( MatchesUser( document.Registration, criteria.CreateUser ) )
+				plans.Add( document.ToModel() );
+		}
+
+		return plans;
+	}
+
+	private IEnumerable<ProjectPlan> ListReleasePlans( string release, PlanSearchCriteria criteria )
+	{
+		ReleaseDocument document = _session.RequireRelease( release );
+
+		return ListPlansOfRelease( document.Name, criteria );
+	}
+
+	/// <summary>
+	/// Plans of every matching release, grouped by release with the groups in
+	/// release-chronological (dependency-chain) order, so the business layer only has to
+	/// order plans within each group.
+	/// </summary>
+	private IEnumerable<ProjectPlan> ListReleasedPlans( PlanSearchCriteria criteria )
+	{
+		List<ReleaseDocument> releases = [];
+
+		if( criteria.ReleaseFinalizeTimestamp is null )
+		{
+			// membership in any release qualifies, open or finalized
+			releases.AddRange( MatchReleaseDocuments( new ReleaseSearchCriteria() ) );
+			releases.AddRange( MatchReleaseDocuments( new ReleaseSearchCriteria( Finalized: true ) ) );
+		}
+		else
+			releases.AddRange(
+				MatchReleaseDocuments( new ReleaseSearchCriteria( FinalizeTimestamp: criteria.ReleaseFinalizeTimestamp ) ) );
+
+		List<ProjectPlan> plans = [];
+
+		foreach( ReleaseDocument release in OrderReleasesChronologically( releases ) )
+			plans.AddRange( ListPlansOfRelease( release.Name, criteria ) );
+
+		return plans;
+	}
+
+	private List<ProjectPlan> ListPlansOfRelease( string release, PlanSearchCriteria criteria )
+	{
+		string plansDirectory = _session.Paths.ReleasePlansDirectory( release );
+
+		List<ProjectPlan> plans = [];
+
+		if( !Directory.Exists( plansDirectory ) )
+			return plans;
+
+		foreach( string planDirectory in Directory.EnumerateDirectories( plansDirectory ) )
+		{
+			PlanDocument? document = JsonFiles.TryRead<PlanDocument>( Path.Combine( planDirectory, FileNames.PlanFile ) );
+
+			if( document is not null && MatchesUser( document.Registration, criteria.CreateUser ) )
+				plans.Add( document.ToModel() );
+		}
+
+		return plans;
+	}
+
+	/// <summary>
+	/// Orders releases by their dependency chain (a release comes after the release it depends
+	/// on), breaking ties by registration timestamp then name. Dependencies outside the given
+	/// set and cycles are tolerated: unsortable remainders fall back to timestamp order.
+	/// </summary>
+	private static IEnumerable<ReleaseDocument> OrderReleasesChronologically( List<ReleaseDocument> releases )
+	{
+		Dictionary<string, ReleaseDocument> byName = new ( StringComparer.OrdinalIgnoreCase );
+
+		foreach( ReleaseDocument release in releases )
+			byName[release.Name] = release;
+
+		List<ReleaseDocument> pending = releases
+										.OrderBy( x => x.Registration.Timestamp )
+										.ThenBy( x => x.Name, StringComparer.OrdinalIgnoreCase )
+										.ToList();
+
+		HashSet<string> emitted = new ( StringComparer.OrdinalIgnoreCase );
+		List<ReleaseDocument> ordered = [];
+
+		while( pending.Count > 0 )
+		{
+			// emit the earliest-registered release whose in-set dependency was emitted, so
+			// this grouping agrees with the business layer's release ordering semantics
+			int ready = pending.FindIndex(
+				x => x.Dependency.Length == 0 || !byName.ContainsKey( x.Dependency ) || emitted.Contains( x.Dependency ) );
+
+			// dependency cycle: emit the remainder in timestamp order rather than failing
+			if( ready < 0 )
+			{
+				ordered.AddRange( pending );
+				break;
+			}
+
+			ordered.Add( pending[ready] );
+			emitted.Add( pending[ready].Name );
+			pending.RemoveAt( ready );
+		}
+
+		return ordered;
+	}
+
+	private static bool MatchesUser( ActionDocument? action, string? user )
+		=> user is null || string.Equals( action?.Subject.EmailAddress, user, StringComparison.OrdinalIgnoreCase );
 }
