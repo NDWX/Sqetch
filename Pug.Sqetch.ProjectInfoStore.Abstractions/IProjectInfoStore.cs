@@ -23,7 +23,7 @@ public interface IProjectInfoStore : IDisposable
 	void AddStep(string plan, ObjectDefinition definition, IEnumerable<string> dependencies, ActionContext context );
 
 	void UpdateStep(string plan, ObjectDefinition definition );
-	
+
 	bool StepExists( string plan, string name );
 
 	IDictionary<string, ProjectElement> GetSteps( string plan );
@@ -40,7 +40,11 @@ public interface IProjectInfoStore : IDisposable
 
 	void DeleteStep( string plan, string name );
 
-	bool VersionExists( string name );
+	/// <summary>
+	/// Whether the release named <paramref name="name"/> exists; with a null or whitespace
+	/// <paramref name="name"/>, whether any release exists at all.
+	/// </summary>
+	bool ReleaseExists( string? name = null );
 
 	/// <summary>
 	/// Plans matching <paramref name="criteria"/>. Released plans are returned grouped by

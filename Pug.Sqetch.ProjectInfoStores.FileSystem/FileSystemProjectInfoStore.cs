@@ -205,7 +205,10 @@ public sealed class FileSystemProjectInfoStore : IProjectInfoStore
 			Directory.Delete( stepDirectory, recursive: true );
 	}
 
-	public bool VersionExists( string name ) => _session.ReadRelease( name ) is not null;
+	public bool ReleaseExists( string? name = null )
+		=> string.IsNullOrWhiteSpace( name )
+			? _session.Paths.EnumerateReleaseDirectories( string.Empty ).Any()
+			: _session.ReadRelease( name ) is not null;
 
 	public IEnumerable<ProjectPlan> ListPlans( PlanSearchCriteria criteria )
 	{

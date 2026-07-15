@@ -180,14 +180,18 @@ public class FileSystemStoreTests
 		using TempProject project = TempProject.Create( ShardingCases.Configuration( sharding ) );
 		using FileSystemProjectStores stores = project.Open();
 
+		// with no name: whether any release exists at all
+		Assert.False( stores.InfoStore.ReleaseExists() );
+
 		stores.InfoStore.AddRelease( new ReleaseDefinition( "2025.12", "", "" ), TestData.Context() );
 		stores.InfoStore.AddRelease( new ReleaseDefinition( "2026.01", "", "" ), TestData.Context() );
 		stores.InfoStore.AddRelease( new ReleaseDefinition( "2026.07", "", "2026.01" ), TestData.Context() );
 
 		stores.InfoStore.SetReleaseContext( "2026.01", TestData.Context() );
 
-		Assert.True( stores.InfoStore.VersionExists( "2026.01" ) );
-		Assert.False( stores.InfoStore.VersionExists( "2026.02" ) );
+		Assert.True( stores.InfoStore.ReleaseExists() );
+		Assert.True( stores.InfoStore.ReleaseExists( "2026.01" ) );
+		Assert.False( stores.InfoStore.ReleaseExists( "2026.02" ) );
 
 		Assert.Equal(
 			["2026.07"],

@@ -6,45 +6,45 @@ namespace Pug.Sqetch;
 public interface IPersistenceProvider
 {
 	IObject<ProjectInfo> Create(ProjectInfo project);
-	
+
 	Task<IObject<ProjectInfo>> CreateAsync(ProjectInfo project);
-	
+
 	IObject<ProjectInfo>? OpenProjectInfo();
-	
+
 	Task<IObject<ProjectInfo>?> OpenProjectInfoAsync();
-	
+
 	IObject<PlanInfo?>? OpenPlanInfo(string name);
-	
+
 	Task<IObject<PlanInfo>?> OpenPlanInfoAsync(string name);
-	
+
 	IObject<PlanInfo> Create(PlanInfo plan);
-	
+
 	Task<IObject<PlanInfo>> CreateAsync( PlanInfo plan );
 
 	void DeletePlan( string name );
-	
+
 	Task DeletePlanAsync( string name );
 
 	void DeletePlanSteps( string name );
-	
+
 	Task DeletePlanStepsAsync( string name );
-	
+
 	StepScriptRepositoryKeys CreateStepScripts( string plan, string name, StepScripts? scripts );
-	
+
 	Task<StepScriptRepositoryKeys> CreateStepScriptsAsync( string plan, string name, StepScripts? scripts  );
-	
+
 	IObject<Stream>? GetStepDeployScript( string plan, string name );
-	
+
 	IObject<Stream>? GetStepVerifyScript( string plan, string name );
-	
+
 	IObject<Stream>? GetStepRollbackScript( string plan, string name );
 
 	StepScriptRepositoryKeys SetStepScripts( string plan, string name, StepScripts scripts);
-	
+
 	Task<StepScriptRepositoryKeys> SetStepScriptsAsync( string plan, string name, StepScripts scripts );
-	
+
 	void DeleteStepScripts( string plan, string name );
-	
+
 	Task DeleteStepScriptsAsync( string plan, string name );
 }
 */
@@ -87,7 +87,7 @@ public class Project : IProject
 
 		if( release is null || release.Finalized is null )
 			return;
-		
+
 		semaphore?.Release();
 
 		throw new PlanFinalizedException();
@@ -96,18 +96,18 @@ public class Project : IProject
 	private void Register( PlanDefinition plan, string? releaseName )
 	{
         ArgumentNullException.ThrowIfNull(plan, nameof(plan));
-		
+
 		ArgumentException.ThrowIfNullOrWhiteSpace( plan.Name, nameof(plan.Name));
-		
+
         plan.Validate();
 
 		if( _infoStore.PlanExists( plan.Name ) )
 			throw new DuplicatePlanNameException();
-		
+
 		if( plan.Dependencies.Count != 0 )
 		{
 			IEnumerable<string> dependablePlans = _infoStore.GetPlans( releaseName ).Values.Select( x => x.Definition.Name);
-			
+
 			foreach( string dependency in plan.Dependencies )
 			{
 				if( !dependablePlans.Contains( dependency ) )
@@ -123,8 +123,8 @@ public class Project : IProject
 		ProjectRelease? release = _infoStore.GetRelease( releaseName );
 
 		if( release is null )
-			throw new UnknownReleaseException();
-		
+			throw new UnknownReleaseException(releaseName);
+
 		IEnumerable<ProjectElement> existingPlans = _infoStore.GetReleasePlans( releaseName );
 
 		EnsureNoMissingDependencies( existingPlans.Select( x => x.Definition.Name ).Append( plan.Name ), releaseName );
@@ -169,10 +169,10 @@ public class Project : IProject
 			throw new ArgumentException( "Value cannot be null or whitespace.", nameof(name) );
 
 		ProjectPlan? plan = _infoStore.GetPlan( name );
-		
+
 		if( plan is null  )
 			return false;
-		
+
 		EnsurePlanNotFinalized( plan, semaphore );
 
 		_infoStore.DeletePlan(name);
@@ -226,13 +226,13 @@ public class Project : IProject
 		using TransactionScope tx = new ();
 
 		ProjectPlan? planInfo = _infoStore.GetPlan( plan );
-		
+
 		if( planInfo is null )
 		{
 			_plansSemaphore.Release();
 			throw new UnknownPlanException( plan );
 		}
-		
+
 		EnsurePlanNotFinalized(planInfo, _plansSemaphore);
 
 		IDictionary<string, ProjectElement> planSteps = _infoStore.GetSteps( plan );
@@ -240,14 +240,14 @@ public class Project : IProject
 		foreach( string dependency in step.Dependencies )
 		{
 			if( planSteps.ContainsKey( dependency ) ) continue;
-			
+
 			_plansSemaphore.Release();
 			throw new MissingStepDependencyException( dependency );
 		}
 
 		StepScripts? scripts = null;
 		StepScriptKeys scriptKeys;
-		
+
 		try
 		{
 			scripts = GetInitialStepScripts();
@@ -303,7 +303,7 @@ public class Project : IProject
 	public StepScripts GetStepScripts( string plan, string step )
 	{
 		ArgumentNullException.ThrowIfNull( plan, nameof(plan) );
-		
+
 		ArgumentNullException.ThrowIfNull(step, nameof(step));
 
 		_plansSemaphore.Wait();
@@ -311,21 +311,21 @@ public class Project : IProject
 		using TransactionScope tx = new ();
 
 		ProjectPlan? planInfo = _infoStore.GetPlan( plan );
-		
+
 		if( planInfo is null )
 		{
 			_plansSemaphore.Release();
 			throw new UnknownPlanException( plan );
 		}
-		
+
 		IDictionary<string, ProjectElement> planSteps = _infoStore.GetSteps( plan );
 
 		StepScripts? scripts = null;
-		
+
 		try
 		{
 			scripts = _scriptsStore.GetStepScripts( plan, step );
-			
+
 			tx.Complete();
 
 			return scripts;
@@ -337,7 +337,7 @@ public class Project : IProject
 		}
 
 	}
-	
+
 	public void Delete( string plan, string step )
 	{
 		ArgumentNullException.ThrowIfNull( plan, nameof(plan) );
@@ -355,7 +355,7 @@ public class Project : IProject
 		}
 
 		EnsurePlanNotFinalized( projectPlan, _plansSemaphore );
-		
+
 		IEnumerable<string> dependants = _infoStore.GetStepDependants( plan, step );
 
 		if( dependants.Any() )
@@ -370,7 +370,7 @@ public class Project : IProject
 		{
 			_infoStore.DeleteStep( plan, step );
 			_scriptsStore.DeleteStepScripts(plan, step);
-			
+
 			tx.Complete();
 		}
 		finally
@@ -388,7 +388,7 @@ public class Project : IProject
 
 		if( !string.IsNullOrEmpty( plan.Release ) )
 			throw new InvalidOperationException( $"Plan {name} is already part of another release" );
-		
+
 		return plan;
 	}
 
@@ -396,7 +396,7 @@ public class Project : IProject
 	{
 		List<ProjectPlan> requiredPlans = [];
 		Dictionary<string, (ProjectPlan, ICollection<string>)> missingDependencies = new ();
-		
+
 		foreach( string plan in includedPlans )
 		{
 			IEnumerable<string> planDependencies = _infoStore.GetPlanDependencies( plan );
@@ -414,10 +414,10 @@ public class Project : IProject
 			foreach( ProjectPlan dependency in dependencies )
 			{
 				ICollection<string>? dependants = null;
-				
+
 				if( missingDependencies.TryGetValue( dependency.Definition.Name, out (ProjectPlan, ICollection<string>) details ) )
 				{
-					details.Item2.Add(plan);	
+					details.Item2.Add(plan);
 				}
 				else
 				{
@@ -437,7 +437,7 @@ public class Project : IProject
 	{
 		IDictionary<string, (ProjectPlan, ICollection<string>)> missingDependencies =
 			DetermineMissingDependencies( includedPlans, release );
-			
+
 		if( missingDependencies.Any())
 			throw new MissingPlanDependenciesException( missingDependencies );
 	}
@@ -458,13 +458,13 @@ public class Project : IProject
 			else // add dependant to list if it is in a planned release
 			{
 				ProjectPlan dependantPlan = _infoStore.GetPlan( dependant )!;
-				
+
 				if( !string.IsNullOrEmpty( dependantPlan.Release ))
 					onDependantFound( dependant, dependantPlan.Release );
 			}
 		}
 	}
-	
+
 	private void EnsureNoAbandonedDependants( string plan, string release, IEnumerable<ProjectElement> includedPlans )
 	{
 		List<PlanDependant> dependantList = [];
@@ -474,13 +474,27 @@ public class Project : IProject
 			List<PlanDependant> planDependants;
 			dependantList.Add( new PlanDependant( dependant, release ) );
 		};
-			
+
 		EnumerateDependants( plan, includedPlans, release, onDependantFound );
 
 		if( dependantList.Count == 0)
 			return;
-		
+
 		throw new AbandonedPlanDependantsException( dependantList );
+	}
+
+	/// <summary>
+	/// Every release except the project's very first must declare the release it depends
+	/// on, and a declared dependency must exist.
+	/// </summary>
+	private void EnsureDependencyDeclaredIfNotFirst(ReleaseDefinition definition)
+	{
+		if (!string.IsNullOrWhiteSpace(definition.Dependency))
+			return;
+
+		if (_infoStore.ReleaseExists())
+			throw new ReleaseDependencyRequiredException();
+
 	}
 
 	private void CreateRelease( ReleaseDefinition definition, IEnumerable<ProjectPlan> plans )
@@ -495,7 +509,7 @@ public class Project : IProject
 		{
 			_infoStore.AddReleasePlan( definition.Name, plan.Definition.Name, actionContext );
 		}
-			
+
 		tx.Complete();
 	}
 
@@ -526,24 +540,23 @@ public class Project : IProject
 			_releasesSemaphore.Wait();
 			releasesLocked = true;
 
+			EnsureDependencyDeclaredIfNotFirst( definition );
+
 			if( !string.IsNullOrWhiteSpace( definition.Dependency ) )
 			{
-				ProjectRelease? dependency = _infoStore.GetRelease( definition.Dependency );
+				ProjectRelease dependency = _infoStore.GetRelease( definition.Dependency )!;
 
-				if( dependency is null )
-					throw new UnknownReleaseException();
-
-				if( dependency.Finalized is null )
-					throw new ReleaseDependencyException("Dependency must already be finalized", [dependency] );
+				if (!_infoStore.ReleaseExists(definition.Dependency))
+					throw new UnknownReleaseException(definition.Dependency);
 			}
-			
+
 			CreateRelease( definition, includedPlans );
 		}
 		finally
 		{
 			if( releasesLocked)
 				_releasesSemaphore.Release();
-			
+
 			_plansSemaphore.Release();
 		}
 	}
@@ -567,17 +580,19 @@ public class Project : IProject
 
 			IEnumerable<ProjectPlan> includedPlans =
 				includeUnreleasedPlans ? _infoStore.GetPlans( string.Empty ).Values : Array.Empty<ProjectPlan>();
-		
+
 			_releasesSemaphore.Wait();
 			releasesLocked = true;
-			
+
+			EnsureDependencyDeclaredIfNotFirst( definition );
+
 			CreateRelease( definition,  includedPlans);
 		}
 		finally
 		{
 			if( releasesLocked)
 				_releasesSemaphore.Release();
-			
+
 			_plansSemaphore.Release();
 		}
 	}
@@ -601,17 +616,17 @@ public class Project : IProject
 	public void AddPlanToRelease( string release, string plan, bool includeDependencies )
 	{
 		ValidateReleaseParameter( release );
-		
+
 		if( string.IsNullOrWhiteSpace( plan ) )
 			throw new ArgumentException( "Value cannot be null or whitespace.", nameof(plan) );
-		
+
 		bool releasesLocked = false;
 		ActionContext actionContext = GetActionContext();
-		
+
 		_plansSemaphore.Wait();
 
 		using TransactionScope tx = new ();
-		
+
 		try
 		{
 			ProjectPlan? projectPlan = EnsurePlanExistsAsOrphan( plan );
@@ -622,7 +637,7 @@ public class Project : IProject
 			ProjectRelease? projectRelease = _infoStore.GetRelease( release );
 
 			if( projectRelease is null )
-				throw new UnknownReleaseException();
+				throw new UnknownReleaseException(release);
 
 			if( projectRelease.Finalized is not null )
 				throw new ReleaseFinalizedException();
@@ -650,14 +665,14 @@ public class Project : IProject
 				EnsureNoMissingDependencies( existingPlans.Select( x => x.Definition.Name ).Append( plan ), release );
 
 			_infoStore.AddReleasePlan( release, plan, actionContext );
-			
+
 			tx.Complete();
 		}
 		finally
 		{
 			if(releasesLocked)
 				_releasesSemaphore.Release();
-			
+
 			_plansSemaphore.Release();
 		}
 	}
@@ -730,14 +745,14 @@ public class Project : IProject
 	public void RemovePlanFromRelease( string release, string plan, bool includeDependants = false )
 	{
 		ValidateReleaseParameter( release );
-		
+
 		if( string.IsNullOrWhiteSpace( plan ) )
 			throw new ArgumentException( "Value cannot be null or whitespace.", nameof(plan) );
-		
+
 		bool releasesLocked = false;
 
 		ActionContext actionContext = GetActionContext();
-		
+
 		_plansSemaphore.Wait();
 
 		using TransactionScope tx = new ();
@@ -745,13 +760,13 @@ public class Project : IProject
 		try
 		{
 			_releasesSemaphore.Wait();
-			
+
 			releasesLocked = true;
 
 			ProjectRelease? projectRelease = _infoStore.GetRelease( release );
 
 			if( projectRelease is null )
-				throw new UnknownReleaseException();
+				throw new UnknownReleaseException(release);
 
 			if( projectRelease.Finalized is not null )
 				throw new ReleaseFinalizedException();
@@ -770,16 +785,16 @@ public class Project : IProject
 				);
 			else
 				EnsureNoAbandonedDependants( plan, release, existingPlans );
-			
+
 			_infoStore.DeleteReleasePlan( release, plan, actionContext );
-			
+
 			tx.Complete();
 		}
 		finally
 		{
 			if(releasesLocked)
 				_releasesSemaphore.Release();
-			
+
 			_plansSemaphore.Release();
 		}
 	}
@@ -787,14 +802,14 @@ public class Project : IProject
 	public void DeleteRelease( string release )
 	{
 		ValidateReleaseParameter( release );
-		
+
 		bool releasesLocked = false;
 		ActionContext actionContext = GetActionContext();
-		
+
 		_plansSemaphore.Wait();
 
 		using TransactionScope tx = new ();
-		
+
 		try
 		{
 			_releasesSemaphore.Wait();
@@ -803,7 +818,7 @@ public class Project : IProject
 			ProjectRelease? projectRelease = _infoStore.GetRelease( release );
 
 			if( projectRelease is null )
-				throw new UnknownReleaseException();
+				throw new UnknownReleaseException(release);
 
 			if( projectRelease.Finalized is not null )
 				throw new ReleaseFinalizedException();
@@ -828,7 +843,7 @@ public class Project : IProject
 		{
 			if(releasesLocked)
 				_releasesSemaphore.Release();
-			
+
 			_plansSemaphore.Release();
 		}
 	}
@@ -851,17 +866,17 @@ public class Project : IProject
 		if( releaseDependencies.Any() )
 			throw new ReleaseDependencyException( "Unfinalized dependencies exist", releaseDependencies );
 	}
-	
+
 	public void FinalizeRelease( string release )
 	{
 		ValidateReleaseParameter( release );
-		
+
 		bool releasesLocked = false;
-		
+
 		_plansSemaphore.Wait();
 
 		using TransactionScope tx = new ();
-		
+
 		try
 		{
 			_releasesSemaphore.Wait();
@@ -870,7 +885,7 @@ public class Project : IProject
 			ProjectRelease? projectRelease = _infoStore.GetRelease( release );
 
 			if( projectRelease is null )
-				throw new UnknownReleaseException();
+				throw new UnknownReleaseException(release);
 
 			if( projectRelease.Finalized is not null )
 				return;
@@ -881,20 +896,20 @@ public class Project : IProject
 				throw new EmptyReleaseException();
 
 			EnsureNoOpenReleaseDependencies( release );
-			
+
 			_infoStore.SetReleaseContext( release, GetActionContext() );
-			
+
 			tx.Complete();
 		}
-		
+
 		finally
 		{
 			if(releasesLocked)
 				_releasesSemaphore.Release();
-			
+
 			_plansSemaphore.Release();
 		}
-		
+
 	}
 
 	public void Dispose()
@@ -902,7 +917,7 @@ public class Project : IProject
 		_infoStore.Dispose();
 		_scriptsStore.Dispose();
 		_plansSemaphore.Dispose();
-		
+
 		GC.SuppressFinalize(this);
 	}
 }

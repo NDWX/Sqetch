@@ -12,10 +12,12 @@ internal static class CliErrors
 			DuplicateStepNameException => "a step with this name already exists in the plan",
 			DuplicateReleaseNameException => "a release with this name already exists",
 			UnknownPlanException unknownPlan => $"plan '{unknownPlan.Name}' does not exist",
-			UnknownReleaseException => "release does not exist",
+			UnknownReleaseException unknownRelease => $"release '{unknownRelease.ReleaseName}' does not exist",
 			ReleaseFinalizedException => "the release is finalized and can no longer be changed",
 			PlanFinalizedException => "the plan belongs to a finalized release and can no longer be changed",
 			EmptyReleaseException => "a release without plans cannot be finalized",
+			ReleaseDependencyRequiredException =>
+				"a release must declare the release it builds on (--depends-on); only the project's first release may omit it",
 			AbandonedPlanDependantsException =>
 				"other plans in the release depend on this plan (use --with-dependants to remove them too)",
 			IncompleteDefinitionException => "the definition is missing a name",

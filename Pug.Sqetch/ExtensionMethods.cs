@@ -10,11 +10,11 @@ internal static class ExtensionMethods
 		foreach(  KeyValuePair<string, (ProjectPlan, ICollection<string>)> dependency  in dependencies )
 		{
 			ICollection<string>? dependants = null;
-				
+
 			if( existing.TryGetValue( dependency.Key, out (ProjectPlan, ICollection<string>) details ) )
 			{
 				dependants = details.Item2;
-				dependants.Add(dependant);	
+				dependants.Add(dependant);
 			}
 			else
 			{
@@ -23,7 +23,7 @@ internal static class ExtensionMethods
 			}
 		}
 	}
-	
+
 	public static void Validate(this ObjectDefinition definition)
 	{
 		if( string.IsNullOrWhiteSpace( definition.Name ) )

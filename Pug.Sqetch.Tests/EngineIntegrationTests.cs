@@ -53,4 +53,31 @@ public class EngineIntegrationTests
 		// registration context carries the wired user identity
 		Assert.Equal( TestData.User, stores.InfoStore.GetPlan( "cleanup" )!.Registration.Subject );
 	}
+
+	[Fact]
+	public void ReleaseDependencyIsRequiredExceptForTheFirstRelease()
+	{
+		using TempProject temp = TempProject.Create( ShardingCases.Configuration( NamePrefixShardingStrategy.StrategyName ) );
+		using FileSystemProjectStores stores = temp.Open();
+		using IProject project = ProjectFactory.Create(
+			stores.InfoStore, stores.ScriptsStore,
+			new ReleaseChainDependencyDeterminator( stores.InfoStore ), TestData.User );
+
+		// only the very first release may omit its dependency
+		project.CreateRelease( new ReleaseDefinition( "2026.01", "", "" ) );
+
+		Assert.Throws<ReleaseDependencyRequiredException>(
+			() => project.CreateRelease( new ReleaseDefinition( "2026.02", "", "" ) ) );
+
+		Assert.Throws<ReleaseDependencyRequiredException>(
+			() => project.CreateRelease( new ReleaseDefinition( "2026.02", "", "" ), Array.Empty<string>() ) );
+
+		// a declared dependency must name an existing release
+		Assert.Throws<UnknownReleaseException>(
+			() => project.CreateRelease( new ReleaseDefinition( "2026.02", "", "2025.12" ) ) );
+
+		project.CreateRelease( new ReleaseDefinition( "2026.02", "", "2026.01" ) );
+
+		Assert.NotNull( stores.InfoStore.GetRelease( "2026.02" ) );
+	}
 }
