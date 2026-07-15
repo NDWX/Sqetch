@@ -18,6 +18,8 @@ internal static class CliErrors
 			EmptyReleaseException => "a release without plans cannot be finalized",
 			ReleaseDependencyRequiredException =>
 				"a release must declare the release it builds on (--depends-on); only the project's first release may omit it",
+			ReleaseDependantExistsException dependantExists =>
+				$"release '{dependantExists.Dependency}' already has dependant release '{dependantExists.Dependant}'; releases form a single lineage — depend on the latest release instead",
 			AbandonedPlanDependantsException =>
 				"other plans in the release depend on this plan (use --with-dependants to remove them too)",
 			IncompleteDefinitionException => "the definition is missing a name",

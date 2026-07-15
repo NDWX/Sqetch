@@ -220,7 +220,7 @@ public class FileSystemStoreTests
 
 		Assert.Equal(
 			["2026.07"],
-			stores.InfoStore.GetReleaseDependants( "2026.01" ).Select( x => x.Definition.Name ).ToArray() );
+			stores.InfoStore.GetReleaseDependant( "2026.01" ).Select( x => x.Definition.Name ).ToArray() );
 
 		Assert.Throws<DuplicateReleaseNameException>(
 			() => stores.InfoStore.AddRelease( new ReleaseDefinition( "2026.01", "", "" ), TestData.Context() ) );

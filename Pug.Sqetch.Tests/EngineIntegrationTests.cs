@@ -80,4 +80,29 @@ public class EngineIntegrationTests
 
 		Assert.NotNull( stores.InfoStore.GetRelease( "2026.02" ) );
 	}
+
+	[Fact]
+	public void AReleaseMayHaveOnlyOneDependant()
+	{
+		using TempProject temp = TempProject.Create( ShardingCases.Configuration( VersionPrefixShardingStrategy.StrategyName ) );
+		using FileSystemProjectStores stores = temp.Open();
+		using IProject project = ProjectFactory.Create(
+			stores.InfoStore, stores.ScriptsStore,
+			new ReleaseChainDependencyDeterminator( stores.InfoStore ), TestData.User );
+
+		project.CreateRelease( new ReleaseDefinition( "2026.01", "", "" ) );
+		project.CreateRelease( new ReleaseDefinition( "2026.02", "", "2026.01" ) );
+
+		// '2026.01' already has dependant '2026.02': a second lineage may not branch off it
+		Assert.Throws<ReleaseDependantExistsException>(
+			() => project.CreateRelease( new ReleaseDefinition( "2026.03", "", "2026.01" ) ) );
+
+		Assert.Throws<ReleaseDependantExistsException>(
+			() => project.CreateRelease( new ReleaseDefinition( "2026.03", "", "2026.01" ), Array.Empty<string>() ) );
+
+		// extending the chain at its tip is fine
+		project.CreateRelease( new ReleaseDefinition( "2026.03", "", "2026.02" ) );
+
+		Assert.NotNull( stores.InfoStore.GetRelease( "2026.03" ) );
+	}
 }

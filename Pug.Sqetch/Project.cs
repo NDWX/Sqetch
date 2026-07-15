@@ -485,16 +485,26 @@ public class Project : IProject
 
 	/// <summary>
 	/// Every release except the project's very first must declare the release it depends
-	/// on, and a declared dependency must exist.
+	/// on; the declared dependency must exist and must not already have a dependant, so
+	/// releases form a single lineage.
 	/// </summary>
-	private void EnsureDependencyDeclaredIfNotFirst(ReleaseDefinition definition)
+	private void EnsureValidDependency( ReleaseDefinition definition )
 	{
-		if (!string.IsNullOrWhiteSpace(definition.Dependency))
+		if( string.IsNullOrWhiteSpace( definition.Dependency ) )
+		{
+			if( _infoStore.ReleaseExists() )
+				throw new ReleaseDependencyRequiredException();
+
 			return;
+		}
 
-		if (_infoStore.ReleaseExists())
-			throw new ReleaseDependencyRequiredException();
+		if( !_infoStore.ReleaseExists( definition.Dependency ) )
+			throw new UnknownReleaseException( definition.Dependency );
 
+		ProjectRelease? dependant = _infoStore.GetReleaseDependant( definition.Dependency ).FirstOrDefault();
+
+		if( dependant is not null )
+			throw new ReleaseDependantExistsException( definition.Dependency, dependant.Definition.Name );
 	}
 
 	private void CreateRelease( ReleaseDefinition definition, IEnumerable<ProjectPlan> plans )
@@ -540,15 +550,7 @@ public class Project : IProject
 			_releasesSemaphore.Wait();
 			releasesLocked = true;
 
-			EnsureDependencyDeclaredIfNotFirst( definition );
-
-			if( !string.IsNullOrWhiteSpace( definition.Dependency ) )
-			{
-				ProjectRelease dependency = _infoStore.GetRelease( definition.Dependency )!;
-
-				if (!_infoStore.ReleaseExists(definition.Dependency))
-					throw new UnknownReleaseException(definition.Dependency);
-			}
+			EnsureValidDependency( definition );
 
 			CreateRelease( definition, includedPlans );
 		}
@@ -584,15 +586,7 @@ public class Project : IProject
 			_releasesSemaphore.Wait();
 			releasesLocked = true;
 
-			EnsureDependencyDeclaredIfNotFirst( definition );
-
-			if( !string.IsNullOrWhiteSpace( definition.Dependency ) )
-			{
-				ProjectRelease dependency = _infoStore.GetRelease( definition.Dependency )!;
-
-				if (!_infoStore.ReleaseExists(definition.Dependency))
-					throw new UnknownReleaseException(definition.Dependency);
-			}
+			EnsureValidDependency( definition );
 
 			CreateRelease( definition,  includedPlans);
 		}
@@ -618,7 +612,7 @@ public class Project : IProject
 
 	public IEnumerable<ProjectRelease> GetReleaseDependants( string release )
 	{
-		return _infoStore.GetReleaseDependants( release );
+		return _infoStore.GetReleaseDependant( release );
 	}
 
 	public void AddPlanToRelease( string release, string plan, bool includeDependencies )
@@ -831,7 +825,7 @@ public class Project : IProject
 			if( projectRelease.Finalized is not null )
 				throw new ReleaseFinalizedException();
 
-			IEnumerable<ProjectRelease> dependants = _infoStore.GetReleaseDependants( release );
+			IEnumerable<ProjectRelease> dependants = _infoStore.GetReleaseDependant( release );
 
 			if( dependants.Any() )
 				throw new ReleaseDependencyException( "Release with dependants cannot be deleted", dependants );

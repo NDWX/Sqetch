@@ -307,7 +307,7 @@ public sealed class FileSystemProjectInfoStore : IProjectInfoStore
 		Directory.Move( source, target );
 	}
 
-	public IEnumerable<ProjectRelease> GetReleaseDependants( string release )
+	public IEnumerable<ProjectRelease> GetReleaseDependant( string release )
 		=> EnumerateReleaseDocuments( string.Empty )
 			.Where( x => string.Equals( x.Dependency, release, StringComparison.OrdinalIgnoreCase ) )
 			.Select( x => x.ToModel() )

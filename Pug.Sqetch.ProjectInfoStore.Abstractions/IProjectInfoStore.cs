@@ -72,7 +72,7 @@ public interface IProjectInfoStore : IDisposable
 
 	void SetReleaseContext( string release, ActionContext releaseContext );
 
-	IEnumerable<ProjectRelease> GetReleaseDependants( string release );
+	IEnumerable<ProjectRelease> GetReleaseDependant( string release );
 
 	IEnumerable<ProjectElement> GetReleasePlans( string release );
 
