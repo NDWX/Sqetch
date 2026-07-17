@@ -223,6 +223,28 @@ public class CliTests : IDisposable
 	}
 
 	[Fact]
+	public void NamesAreRestrictedToAlphanumericsAndSafePunctuation()
+	{
+		InitializeProject();
+
+		// every allowed punctuation character is accepted
+		Assert.Equal( 0, Run( "plan", "create", "--name", "plan-1_a+b(c)@d#e.f" ).ExitCode );
+
+		foreach( string[] arguments in new[]
+				{
+					new[] { "plan", "create", "--name", "bad*plan" },
+					new[] { "plan", "add-step", "--plan", "plan-1_a+b(c)@d#e.f", "--name", "bad/step" },
+					new[] { "release", "create", "--name", "2026 07" }
+				} )
+		{
+			CommandAppResult result = Run( arguments );
+
+			Assert.NotEqual( 0, result.ExitCode );
+			Assert.Contains( "may only contain", result.Output );
+		}
+	}
+
+	[Fact]
 	public void ReleaseDeleteRemovesTheReleaseAndFreesItsPlans()
 	{
 		InitializeProject();

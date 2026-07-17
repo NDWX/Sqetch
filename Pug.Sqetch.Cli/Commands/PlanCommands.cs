@@ -122,9 +122,15 @@ public sealed class PlanCreateCommand( IAnsiConsole console ) : Command<PlanCrea
 		public string? Release { get; init; }
 
 		public override ValidationResult Validate()
-			=> string.IsNullOrWhiteSpace( Name )
-				? ValidationResult.Error( "--name is required" )
-				: ValidationResult.Success();
+		{
+			if( string.IsNullOrWhiteSpace( Name ) )
+				return ValidationResult.Error( "--name is required" );
+
+			if( !NameValidation.IsValid( Name ) )
+				return ValidationResult.Error( NameValidation.Error( "--name" ) );
+
+			return ValidationResult.Success();
+		}
 	}
 
 	protected override int Execute( CommandContext context, Settings settings, CancellationToken cancellationToken )

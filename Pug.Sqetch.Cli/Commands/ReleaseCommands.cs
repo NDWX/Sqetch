@@ -39,6 +39,9 @@ public sealed class ReleaseCreateCommand( IAnsiConsole console ) : Command<Relea
 			if( Plans is not null && AllUnreleased )
 				return ValidationResult.Error( "specify either --plans or --all-unreleased, not both" );
 
+			if( !NameValidation.IsValid( Name ) )
+				return ValidationResult.Error( NameValidation.Error( "--name" ) );
+
 			return base.Validate();
 		}
 	}

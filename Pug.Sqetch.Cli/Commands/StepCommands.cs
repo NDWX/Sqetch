@@ -30,9 +30,15 @@ public sealed class PlanAddStepCommand( IAnsiConsole console ) : Command<PlanAdd
 		public string? Requires { get; init; }
 
 		public override ValidationResult Validate()
-			=> string.IsNullOrWhiteSpace( Name )
-				? ValidationResult.Error( "--name is required" )
-				: base.Validate();
+		{
+			if( string.IsNullOrWhiteSpace( Name ) )
+				return ValidationResult.Error( "--name is required" );
+
+			if( !NameValidation.IsValid( Name ) )
+				return ValidationResult.Error( NameValidation.Error( "--name" ) );
+
+			return base.Validate();
+		}
 	}
 
 	protected override int Execute( CommandContext context, Settings settings, CancellationToken cancellationToken )
