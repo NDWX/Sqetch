@@ -7,8 +7,10 @@ namespace Pug.Sqetch.Tests.Cli;
 /// <summary>
 /// Drives the real 'sqetch' command tree through <see cref="CommandAppTester"/> against a
 /// temp project directory. Commands resolve the project from the current directory, so the
-/// fixture switches it per test; xunit runs the methods of one class sequentially.
+/// fixture switches it per test; the "cli" collection keeps every class that does so on a
+/// single sequential worker.
 /// </summary>
+[Collection( "cli" )]
 public class CliTests : IDisposable
 {
 	private readonly string _root;

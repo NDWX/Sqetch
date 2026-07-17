@@ -83,5 +83,8 @@ public static class SqetchApp
 			release.AddCommand<ReleaseFinalizeCommand>( "finalize" )
 					.WithDescription( "Finalize a release, freezing it and its plans" );
 		} );
+
+		config.AddCommand<BundleCommand>( "bundle" )
+				.WithDescription( "Bundle plans and their steps into a deployment archive or directory" );
 	}
 }

@@ -304,38 +304,58 @@ public class Project : IProject
 	{
 		ArgumentNullException.ThrowIfNull( plan, nameof(plan) );
 
-		ArgumentNullException.ThrowIfNull(step, nameof(step));
+		ArgumentNullException.ThrowIfNull( step, nameof(step) );
 
 		_plansSemaphore.Wait();
 
 		using TransactionScope tx = new ();
 
-		ProjectPlan? planInfo = _infoStore.GetPlan( plan );
-
-		if( planInfo is null )
-		{
-			_plansSemaphore.Release();
-			throw new UnknownPlanException( plan );
-		}
-
-		IDictionary<string, ProjectElement> planSteps = _infoStore.GetSteps( plan );
-
-		StepScripts? scripts = null;
-
 		try
 		{
-			scripts = _scriptsStore.GetStepScripts( plan, step );
+			ProjectPlan? planInfo = _infoStore.GetPlan( plan );
+
+			if( planInfo is null )
+				throw new UnknownPlanException( plan );
+
+			if( !_infoStore.GetSteps( plan ).ContainsKey( step ) )
+				throw new UnknownStepException( plan, step );
+
+			StepScripts? scripts = _scriptsStore.GetStepScripts( plan, step );
+
+			List<string> missing = new ();
+
+			if( scripts?.DeployScript is null )
+				missing.Add( "deploy" );
+
+			if( scripts?.VerifyScript is null )
+				missing.Add( "verify" );
+
+			if( scripts?.RollbackScript is null )
+				missing.Add( "rollback" );
+
+			if( missing.Count > 0 )
+			{
+				scripts?.Dispose();
+				throw new MissingStepScriptsException( plan, step, missing );
+			}
 
 			tx.Complete();
 
-			return scripts;
+			// the caller owns the returned streams
+			return scripts!;
 		}
 		finally
 		{
 			_plansSemaphore.Release();
-			scripts?.Dispose();
 		}
+	}
 
+	public void VerifyStepScripts( string plan )
+	{
+		foreach( ProjectElement step in GetSteps( plan ) )
+			using( GetStepScripts( plan, step.Definition.Name ) )
+			{
+			}
 	}
 
 	public void Delete( string plan, string step )

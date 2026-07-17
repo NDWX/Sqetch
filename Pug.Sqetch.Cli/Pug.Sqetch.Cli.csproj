@@ -8,7 +8,10 @@
     </PropertyGroup>
 
     <ItemGroup>
+      <ProjectReference Include="..\Pug.Sqetch.Bundling.BundleTypes\Pug.Sqetch.Bundling.BundleTypes.csproj" />
+      <ProjectReference Include="..\Pug.Sqetch.Bundling.Layouts\Pug.Sqetch.Bundling.Layouts.csproj" />
       <ProjectReference Include="..\Pug.Sqetch\Pug.Sqetch.csproj" />
+      <ProjectReference Include="..\Pug.Sqetch.Bundling\Pug.Sqetch.Bundling.csproj" />
       <ProjectReference Include="..\Pug.Sqetch.ProjectInfoStores.FileSystem\Pug.Sqetch.ProjectInfoStores.FileSystem.csproj" />
     </ItemGroup>
 
