@@ -18,6 +18,15 @@ public sealed class TarGzBundleType : IBundleType
 	public IBundleWriter Create( Stream output )
 		=> Create( output, leaveOutputOpen: true );
 
+	public IBundleReader Open( string path )
+		=> BundleInput.ExtractToTemporary( path, ( archive, directory ) =>
+		{
+			using FileStream file = new ( archive, FileMode.Open, FileAccess.Read );
+			using GZipStream gzip = new ( file, CompressionMode.Decompress );
+
+			TarFile.ExtractToDirectory( gzip, directory, overwriteFiles: false );
+		} );
+
 	private static IBundleWriter Create( Stream output, bool leaveOutputOpen )
 	{
 		GZipStream gzip = new ( output, CompressionLevel.Optimal, leaveOpen: leaveOutputOpen );

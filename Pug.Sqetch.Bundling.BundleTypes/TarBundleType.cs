@@ -17,6 +17,10 @@ public sealed class TarBundleType : IBundleType
 	public IBundleWriter Create( Stream output )
 		=> new Writer( new TarWriter( output, leaveOpen: true ), wrapper: null );
 
+	public IBundleReader Open( string path )
+		=> BundleInput.ExtractToTemporary( path, ( archive, directory )
+				=> TarFile.ExtractToDirectory( archive, directory, overwriteFiles: false ) );
+
 	/// <summary>
 	/// Shared by <see cref="TarBundleType"/> and <see cref="TarGzBundleType"/>;
 	/// <paramref name="wrapper"/> is an optional compression stream between the tar writer

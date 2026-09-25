@@ -17,6 +17,10 @@ public sealed class ZipBundleType : IBundleType
 	public IBundleWriter Create( Stream output )
 		=> new Writer( new ZipArchive( output, ZipArchiveMode.Create, leaveOpen: true ) );
 
+	public IBundleReader Open( string path )
+		=> BundleInput.ExtractToTemporary( path, ( archive, directory )
+				=> ZipFile.ExtractToDirectory( archive, directory ) );
+
 	private sealed class Writer( ZipArchive archive ) : IBundleWriter
 	{
 		public void Add( string path, Stream content )

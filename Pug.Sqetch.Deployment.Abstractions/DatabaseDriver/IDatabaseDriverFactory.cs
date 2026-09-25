@@ -21,5 +21,6 @@ public interface IDatabaseDriverFactory
     /// Implementation will validate provided parameters and create return an instance of IDatabaseDriver that will be used by deployment and change journaling logic
     /// </summary>
     /// <param name="parameters">Parameters provided by user</param>
-    IDatabaseDriver Create(IDictionary<string, string> parameters);
+    /// <param name="stepScriptTimeout">Timeout the driver must apply to every step script execution; <see cref="Timeout.InfiniteTimeSpan"/> means no timeout</param>
+    IDatabaseDriver Create(IDictionary<string, string> parameters, TimeSpan stepScriptTimeout);
 }

@@ -25,6 +25,14 @@ public sealed class DirectoryBundleType : IBundleType
 		return new Writer( outputPath );
 	}
 
+	public IBundleReader Open( string path )
+	{
+		if( !Directory.Exists( path ) )
+			throw new BundlingException( $"Bundle '{path}' does not exist." );
+
+		return new DirectoryBundleReader( path, deleteOnDispose: false );
+	}
+
 	private sealed class Writer( string root ) : IBundleWriter
 	{
 		public void Add( string path, Stream content )

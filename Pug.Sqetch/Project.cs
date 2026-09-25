@@ -512,15 +512,21 @@ public class Project : IProject
 	{
 		if( string.IsNullOrWhiteSpace( definition.Dependency ) )
 		{
+			/*
+			 New release must have dependency if at least one other release exists.
+			 This also ensures dependency is not assigned later, which could cause circular dependencies.
+			*/
 			if( _infoStore.ReleaseExists() )
 				throw new ReleaseDependencyRequiredException();
 
 			return;
 		}
 
+		// Dependency must exist
 		if( !_infoStore.ReleaseExists( definition.Dependency ) )
 			throw new UnknownReleaseException( definition.Dependency );
 
+		// Dependency must not already have a dependant, which would cause branching of releases
 		ProjectRelease? dependant = _infoStore.GetReleaseDependant( definition.Dependency ).FirstOrDefault();
 
 		if( dependant is not null )

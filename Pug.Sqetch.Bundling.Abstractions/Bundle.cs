@@ -19,7 +19,13 @@ public sealed record Bundle(
 	IReadOnlyList<BundleRelease> Releases,
 	IReadOnlyList<BundlePlan> Plans );
 
-public sealed record BundleRelease( string Name, string Description, bool Finalized );
+/// <summary>
+/// <paramref name="Dependency"/> names the release this one follows in the project's single
+/// release lineage; it is empty for the release that starts the lineage. A bundle that omits
+/// the dependency's own release continues from it, and deployment accepts that only when the
+/// database has that release completely deployed.
+/// </summary>
+public sealed record BundleRelease( string Name, string Description, string Dependency, bool Finalized );
 
 /// <summary><paramref name="Release"/> is empty for unreleased plans (test selection).</summary>
 public sealed record BundlePlan(

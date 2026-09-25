@@ -25,6 +25,7 @@ public class BundleBuilderTests
 		Assert.Equal( "test-project", bundle.Project.Name );
 		Assert.Equal( ["2026.07"], bundle.Releases.Select( x => x.Name ).ToArray() );
 		Assert.True( bundle.Releases[0].Finalized );
+		Assert.Equal( "", bundle.Releases[0].Dependency );
 
 		// dependency order within the release: 'index' depends on 'table'
 		Assert.Equal( ["table", "index"], bundle.Plans.Select( x => x.Name ).ToArray() );
@@ -47,9 +48,70 @@ public class BundleBuilderTests
 
 		Assert.Equal( ["2026.07", "2026.08"], bundle.Releases.Select( x => x.Name ).ToArray() );
 		Assert.Equal( [true, false], bundle.Releases.Select( x => x.Finalized ).ToArray() );
+		Assert.Equal( ["", "2026.07"], bundle.Releases.Select( x => x.Dependency ).ToArray() );
 
 		Assert.Equal( ["table", "index", "cleanup", "pending"], bundle.Plans.Select( x => x.Name ).ToArray() );
 		Assert.Equal( ["2026.07", "2026.07", "2026.08", ""], bundle.Plans.Select( x => x.Release ).ToArray() );
+	}
+
+	[Fact]
+	public void AssembleSinceYieldsOnlyReleasesAfterIt()
+	{
+		using TempProject temp = TempProject.Create();
+		using FileSystemProjectStores stores = temp.Open();
+		using IProject project = CreateProject( stores );
+
+		PopulateChainedFinalizedReleases( temp, project );
+
+		Bundle bundle = Builder( stores, project ).Assemble( BundleSelection.Finalized, since: "2026.07" );
+
+		Assert.Equal( ["2026.08"], bundle.Releases.Select( x => x.Name ).ToArray() );
+		Assert.Equal( "2026.07", bundle.Releases[0].Dependency );
+		Assert.Equal( ["cleanup"], bundle.Plans.Select( x => x.Name ).ToArray() );
+	}
+
+	[Fact]
+	public void AssembleSinceAnOpenReleaseIsDiagnosableNotReportedAsUnknown()
+	{
+		using TempProject temp = TempProject.Create();
+		using FileSystemProjectStores stores = temp.Open();
+		using IProject project = CreateProject( stores );
+
+		PopulateProject( temp, project );
+
+		// '2026.08' is open (unfinalized); a Finalized selection still locates it in the
+		// full chain rather than reporting it unknown - it just leaves no finalized
+		// releases after it, which is an empty bundle
+		Assert.Throws<EmptyBundleException>(
+			() => Builder( stores, project ).Assemble( BundleSelection.Finalized, since: "2026.08" ) );
+	}
+
+	[Fact]
+	public void AssembleThrowsUnknownReleaseExceptionWhenSinceIsNotInTheChain()
+	{
+		using TempProject temp = TempProject.Create();
+		using FileSystemProjectStores stores = temp.Open();
+		using IProject project = CreateProject( stores );
+
+		PopulateChainedFinalizedReleases( temp, project );
+
+		UnknownReleaseException error = Assert.Throws<UnknownReleaseException>(
+			() => Builder( stores, project ).Assemble( BundleSelection.Finalized, since: "nope" ) );
+
+		Assert.Equal( "nope", error.ReleaseName );
+	}
+
+	[Fact]
+	public void AssembleSinceTheLastReleaseThrowsEmptyBundleException()
+	{
+		using TempProject temp = TempProject.Create();
+		using FileSystemProjectStores stores = temp.Open();
+		using IProject project = CreateProject( stores );
+
+		PopulateChainedFinalizedReleases( temp, project );
+
+		Assert.Throws<EmptyBundleException>(
+			() => Builder( stores, project ).Assemble( BundleSelection.Finalized, since: "2026.08" ) );
 	}
 
 	[Fact]
@@ -109,6 +171,21 @@ public class BundleBuilderTests
 		project.CreateRelease( new ReleaseDefinition( "2026.07", "July", "" ), ["table", "index"] );
 		project.FinalizeRelease( "2026.07" );
 		project.CreateRelease( new ReleaseDefinition( "2026.08", "August", "2026.07" ), ["cleanup"] );
+	}
+
+	/// <summary>'table' in finalized release 2026.07, 'cleanup' in finalized release 2026.08.</summary>
+	private static void PopulateChainedFinalizedReleases( TempProject temp, IProject project )
+	{
+		project.Add( new PlanDefinition( "table", "Create table", [] ) );
+		project.Add( new PlanDefinition( "cleanup", "Cleanup", [] ) );
+
+		SeedScripts( temp, project.Add( new StepDefinition( "table", "create", "", [] ), "table" ), "create" );
+		SeedScripts( temp, project.Add( new StepDefinition( "cleanup", "drop", "", [] ), "cleanup" ), "drop" );
+
+		project.CreateRelease( new ReleaseDefinition( "2026.07", "July", "" ), ["table"] );
+		project.FinalizeRelease( "2026.07" );
+		project.CreateRelease( new ReleaseDefinition( "2026.08", "August", "2026.07" ), ["cleanup"] );
+		project.FinalizeRelease( "2026.08" );
 	}
 
 	private static void SeedScripts( TempProject temp, StepScriptKeys keys, string step )

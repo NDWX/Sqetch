@@ -118,6 +118,53 @@ public class BundleCliTests : IDisposable
 	}
 
 	[Fact]
+	public void SinceBundlesOnlyTheReleasesAfterTheNamedOne()
+	{
+		InitializeProject();
+		CreateFinalizedRelease();
+
+		Assert.Equal( 0, Run( "plan", "create", "--name", "index" ).ExitCode );
+		Assert.Equal( 0, Run( "plan", "add-step", "--plan", "index", "--name", "create" ).ExitCode );
+		Assert.Equal(
+			0,
+			Run(
+					"release", "create", "--name", "2026.08", "--plans", "index",
+					"--depends-on", "2026.07" )
+				.ExitCode );
+		Assert.Equal( 0, Run( "release", "finalize", "--name", "2026.08" ).ExitCode );
+
+		CommandAppResult result = Run( "bundle", "--since", "2026.07", "--bundle-output-path", "since.zip" );
+
+		Assert.Equal( 0, result.ExitCode );
+		Assert.Equal( "since.zip", result.Output );
+
+		using ZipArchive archive = ZipFile.OpenRead( Path.Combine( _root, "since.zip" ) );
+		using JsonDocument manifest = JsonDocument.Parse(
+			new StreamReader( archive.GetEntry( "manifest.json" )!.Open() ).ReadToEnd() );
+
+		JsonElement[] releases = manifest.RootElement.GetProperty( "releases" ).EnumerateArray().ToArray();
+
+		Assert.Equal( ["2026.08"], releases.Select( x => x.GetProperty( "name" ).GetString() ).ToArray() );
+		Assert.Equal( "2026.07", releases[0].GetProperty( "dependency" ).GetString() );
+
+		JsonElement[] plans = manifest.RootElement.GetProperty( "plans" ).EnumerateArray().ToArray();
+
+		Assert.Equal( ["index"], plans.Select( x => x.GetProperty( "name" ).GetString() ).ToArray() );
+	}
+
+	[Fact]
+	public void SinceWithAnUnknownReleaseFailsWithFriendlyError()
+	{
+		InitializeProject();
+		CreateFinalizedRelease();
+
+		CommandAppResult result = Run( "bundle", "--since", "nope" );
+
+		Assert.Equal( 1, result.ExitCode );
+		Assert.Contains( "does not exist", result.Output );
+	}
+
+	[Fact]
 	public void DirectoryBundleMaterializesTheTree()
 	{
 		InitializeProject();

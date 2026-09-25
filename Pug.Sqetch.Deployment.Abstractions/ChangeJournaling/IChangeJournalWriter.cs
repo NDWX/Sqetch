@@ -1,7 +1,7 @@
 namespace Pug.Sqetch.Deployment.DatabaseDriver.Abstractions;
 
 /// <summary>
-/// Interface for database change journal writer
+/// Interface for database change journaling
 /// </summary>
 public interface IChangeJournalWriter
 {
@@ -99,18 +99,18 @@ public interface IChangeJournalWriter
     void RolledBackRelease(string name, IDatabaseTransaction transaction);
 
     /// <summary>
-    /// Retrieves the name of the latest deployed journaled regardless of completion.
+    /// Retrieves the latest journaled release regardless of completion.
     /// </summary>
     /// <param name="driver">The database driver used to query the release information.</param>
-    /// <returns>The name of the latest deployed release.</returns>
+    /// <returns>The latest journaled release; null when nothing has been journaled yet. An empty name is valid: the pseudo-release of unreleased plans. Complete is true only when the release's completion was journaled; false means plans of that release remain to deploy.</returns>
 
-    string GetLatestRelease(IDatabaseDriver driver);
+    JournaledRelease? GetLatestRelease(IDatabaseDriver driver);
 
     /// <summary>
     /// Retrieves the list of plans that have been successfully deployed for a specific release from the database.
     /// </summary>
     /// <param name="release">The name of the release for which to retrieve the deployed plans.</param>
     /// <param name="driver">The database driver used to query the deployment data.</param>
-    /// <returns>A collection of deployed plan names associated with the specified release.</returns>
+    /// <returns>The deployed plan names associated with the specified release, in deployment order, oldest first. The order is part of the contract: deployment of an incompletely deployed release resumes at the plan following the last one of this sequence.</returns>
     IEnumerable<string> GetDeployedPlans(string release, IDatabaseDriver driver);
 }

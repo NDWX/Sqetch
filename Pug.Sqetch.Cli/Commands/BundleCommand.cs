@@ -26,6 +26,10 @@ public sealed class BundleCommand( IAnsiConsole console ) : Command<BundleComman
 		[Description( "Output archive file or directory; defaults to <project>-<timestamp> in the current directory" )]
 		public string? BundleOutputPath { get; init; }
 
+		[CommandOption( "--since <RELEASE>" )]
+		[Description( "Bundle only the releases after the named one (a continuation bundle)" )]
+		public string? Since { get; init; }
+
 		internal BundleSelection Selection { get; private set; }
 
 		internal IBundleType Type { get; private set; } = null!;
@@ -34,6 +38,9 @@ public sealed class BundleCommand( IAnsiConsole console ) : Command<BundleComman
 		{
 			if( Test && Finalized )
 				return ValidationResult.Error( "specify either --test or --finalized, not both" );
+
+			if( !NameValidation.IsValid( Since ) )
+				return ValidationResult.Error( NameValidation.Error( "--since" ) );
 
 			BundleTypeRegistry registry = new ();
 			registry.RegisterBundleTypes();
@@ -57,7 +64,7 @@ public sealed class BundleCommand( IAnsiConsole console ) : Command<BundleComman
 
 		// assembling verifies every included plan's step scripts, so failures surface
 		// before any output exists
-		Bundle bundle = new BundleBuilder( session.Project, definition ).Assemble( settings.Selection );
+		Bundle bundle = new BundleBuilder( session.Project, definition ).Assemble( settings.Selection, settings.Since );
 
 		string path = settings.BundleOutputPath
 					?? settings.Type.DefaultOutputName( $"{definition.Name}-{DateTime.Now:yyyyMMddHHmmss}" );

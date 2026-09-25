@@ -19,14 +19,17 @@ public class BundleBuilder
 	}
 
 	/// <summary>
-	/// Assembles the bundle in deployment-chronological order. Throws
-	/// <see cref="EmptyBundleException"/> when no plans match <paramref name="selection"/>
-	/// and <see cref="MissingStepScriptsException"/> when an included plan is missing a
-	/// step script.
+	/// Assembles the bundle in deployment-chronological order. When <paramref name="since"/>
+	/// is given, only releases strictly after it in the chain are included — a continuation
+	/// bundle. Throws <see cref="EmptyBundleException"/> when no plans match
+	/// <paramref name="selection"/>, <see cref="UnknownReleaseException"/> when
+	/// <paramref name="since"/> does not name a release in the chain, and
+	/// <see cref="MissingStepScriptsException"/> when an included plan is missing a step
+	/// script.
 	/// </summary>
-	public Bundle Assemble( BundleSelection selection )
+	public Bundle Assemble( BundleSelection selection, string? since = null )
 	{
-		List<ProjectRelease> releases = SelectReleases( selection );
+		List<ProjectRelease> releases = SelectReleases( selection, since );
 		List<BundlePlan> plans = new ();
 
 		foreach( ProjectRelease release in releases )
@@ -48,21 +51,35 @@ public class BundleBuilder
 			_definition,
 			selection,
 			releases.Select( x => new BundleRelease(
-				x.Definition.Name, x.Definition.Description, x.Finalized is not null ) ).ToList(),
+				x.Definition.Name, x.Definition.Description, x.Definition.Dependency ?? "", x.Finalized is not null ) ).ToList(),
 			plans );
 	}
 
-	private List<ProjectRelease> SelectReleases( BundleSelection selection )
+	private List<ProjectRelease> SelectReleases( BundleSelection selection, string? since )
 	{
 		List<ProjectRelease> releases =
 			_project.GetReleases( new ReleaseSearchCriteria( Finalized: true ) ).ToList();
 
 		// finalized releases are always the prefix of the single release lineage, so open
-		// releases follow them in chain order
-		if( selection == BundleSelection.Test )
+		// releases follow them in chain order; 'since' needs the full chain too, so a
+		// '--since' naming an open release is diagnosable rather than reported as unknown
+		if( selection == BundleSelection.Test || since is not null )
 			releases.AddRange( _project.GetReleases( new ReleaseSearchCriteria() ) );
 
-		return releases;
+		if( since is not null )
+		{
+			int index = releases.FindIndex(
+				x => string.Equals( x.Definition.Name, since, StringComparison.OrdinalIgnoreCase ) );
+
+			if( index < 0 )
+				throw new UnknownReleaseException( since );
+
+			releases = releases.Skip( index + 1 ).ToList();
+		}
+
+		return selection == BundleSelection.Test
+			? releases
+			: releases.Where( x => x.Finalized is not null ).ToList();
 	}
 
 	private BundlePlan ToBundlePlan( ProjectPlan plan )

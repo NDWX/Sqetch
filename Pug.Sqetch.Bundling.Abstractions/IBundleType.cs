@@ -16,4 +16,10 @@ public interface IBundleType
 	/// target with a <see cref="BundlingException"/>.
 	/// </summary>
 	IBundleWriter Create( string outputPath );
+
+	/// <summary>
+	/// Opens an existing bundle at <paramref name="path"/> for reading; throws
+	/// <see cref="BundlingException"/> when the bundle is missing or cannot be read.
+	/// </summary>
+	IBundleReader Open( string path );
 }

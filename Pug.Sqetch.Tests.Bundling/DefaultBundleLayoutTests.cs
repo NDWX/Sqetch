@@ -14,7 +14,7 @@ public class DefaultBundleLayoutTests
 		Bundle bundle = new (
 			new ProjectDefinition( "demo", "Demo project", "postgres" ),
 			BundleSelection.Finalized,
-			[new BundleRelease( "2026.07", "July release", true )],
+			[new BundleRelease( "2026.07", "July release", "", true )],
 			[
 				new BundlePlan(
 					"table", "Create table", "2026.07", [],
@@ -95,7 +95,129 @@ public class DefaultBundleLayoutTests
 			manifest.RootElement.GetProperty( "plans" )[0].GetProperty( "steps" )[0].GetProperty( "name" ).GetString() );
 	}
 
+	[Fact]
+	public void WrittenManifestsReadBackAsTheSameTypedModel()
+	{
+		Bundle bundle = new (
+			new ProjectDefinition( "demo", "Demo project", "postgres" ),
+			BundleSelection.Test,
+			[new BundleRelease( "2026.07", "July release", "2026.06", true )],
+			[
+				new BundlePlan(
+					"table", "Create table", "2026.07", [],
+					[new BundleStep( "create", "creates it", [], () => new StepScripts( Script( "-- d" ), Script( "-- v" ), Script( "-- r" ) ) )] ),
+				new BundlePlan(
+					"pending", "Unreleased", "", ["table"],
+					[new BundleStep( "tweak", "", ["create"], () => new StepScripts( Script( "-- d" ), Script( "-- v" ), Script( "-- r" ) ) )] )
+			] );
+
+		RecordingWriter writer = new ();
+		DefaultBundleLayout layout = new ();
+
+		layout.Write( bundle, writer );
+
+		BundleManifest manifest = layout.ReadManifest( new FakeReader( writer ) );
+
+		Assert.Equal( new BundleManifestProject( "demo", "Demo project", "postgres" ), manifest.Project );
+		Assert.Equal( BundleSelection.Test, manifest.Selection );
+		Assert.Equal( [new BundleManifestRelease( "2026.07", "July release", "2026.06", true )], manifest.Releases );
+		Assert.Equal( ["table", "pending"], manifest.Plans.Select( x => x.Name ).ToArray() );
+		Assert.Equal( "", manifest.Plans[1].Release );
+		Assert.Equal( ["table"], manifest.Plans[1].Dependencies );
+		Assert.Equal( ["create"], manifest.Plans[1].Steps[0].Dependencies );
+	}
+
+	[Fact]
+	public void MissingManifestIsRefused()
+	{
+		InvalidBundleManifestException error = Assert.Throws<InvalidBundleManifestException>(
+			() => new DefaultBundleLayout().ReadManifest( new FakeReader() ) );
+
+		Assert.Contains( "manifest.json", error.Message );
+	}
+
+	[Theory]
+	[InlineData( "not json at all" )]
+	[InlineData( "null" )]
+	[InlineData( """{ "plans": [] }""" )]
+	[InlineData( """{ "project": { "name": "demo" } }""" )]
+	[InlineData( """{ "project": { "name": "demo" }, "plans": [ { "description": "unnamed" } ] }""" )]
+	[InlineData( """{ "project": { "name": "demo" }, "plans": [ { "name": "p", "steps": [ {} ] } ] }""" )]
+	[InlineData( """{ "project": { "name": "demo" }, "plans": [], "releases": [ {} ] }""" )]
+	public void InvalidManifestsAreRefused( string manifest )
+	{
+		Assert.Throws<InvalidBundleManifestException>(
+			() => new DefaultBundleLayout().ReadManifest( new FakeReader( manifest ) ) );
+	}
+
+	[Fact]
+	public void AbsentOptionalManifestMembersFallBackToEmptyValues()
+	{
+		BundleManifest manifest = new DefaultBundleLayout().ReadManifest( new FakeReader(
+			"""
+			{
+				"project": { "name": "demo" },
+				"releases": [ { "name": "2026.07" }, { "name": "2026.08" } ],
+				"plans": [ { "name": "table", "steps": [ { "name": "create" } ] } ]
+			}
+			""" ) );
+
+		Assert.Equal( new BundleManifestProject( "demo", "", "" ), manifest.Project );
+		Assert.Equal( BundleSelection.Finalized, manifest.Selection );
+
+		// releases without a 'dependency' member normalize positionally: the first falls
+		// back to "", each following one to the preceding release's name
+		Assert.Equal( ["", "2026.07"], manifest.Releases.Select( x => x.Dependency ).ToArray() );
+
+		BundleManifestPlan plan = Assert.Single( manifest.Plans );
+
+		Assert.Equal( "", plan.Description );
+		Assert.Equal( "", plan.Release );
+		Assert.Empty( plan.Dependencies );
+		Assert.Empty( Assert.Single( plan.Steps ).Dependencies );
+	}
+
+	[Fact]
+	public void ScriptPathsFollowThePlansTree()
+	{
+		DefaultBundleLayout layout = new ();
+
+		Assert.Equal( "plans/table/steps/create/deploy.sql", layout.ScriptPath( "table", "create", StepScriptKind.Deploy ) );
+		Assert.Equal( "plans/table/steps/create/verify.sql", layout.ScriptPath( "table", "create", StepScriptKind.Verify ) );
+		Assert.Equal( "plans/table/steps/create/rollback.sql", layout.ScriptPath( "table", "create", StepScriptKind.Rollback ) );
+	}
+
 	private static TrackingStream Script( string content ) => new ( Encoding.UTF8.GetBytes( content ) );
+
+	private sealed class FakeReader : IBundleReader
+	{
+		private readonly Dictionary<string, string> _entries = new ();
+
+		public FakeReader()
+		{
+		}
+
+		public FakeReader( string manifest ) => _entries["manifest.json"] = manifest;
+
+		public FakeReader( RecordingWriter writer )
+		{
+			foreach( (string path, string content) in writer.Entries )
+				_entries[path] = content;
+		}
+
+		public IEnumerable<string> Entries => _entries.Keys;
+
+		public bool Contains( string path ) => _entries.ContainsKey( path );
+
+		public Stream Open( string path )
+			=> _entries.TryGetValue( path, out string? content )
+				? new MemoryStream( Encoding.UTF8.GetBytes( content ) )
+				: throw new BundlingException( $"Bundle has no entry '{path}'." );
+
+		public void Dispose()
+		{
+		}
+	}
 
 	private sealed class RecordingWriter : IBundleWriter
 	{

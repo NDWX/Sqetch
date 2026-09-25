@@ -200,5 +200,7 @@ public class BundleTypeTests
 		public string DefaultOutputName( string baseName ) => baseName;
 
 		public IBundleWriter Create( string outputPath ) => throw new NotSupportedException();
+
+		public IBundleReader Open( string path ) => throw new NotSupportedException();
 	}
 }
