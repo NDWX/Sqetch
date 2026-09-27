@@ -33,14 +33,14 @@ public class DeploymentEngine(
 
 		if( latest is null )
 		{
-			Deploy( groups, lastGroup: null, deployedPlans: null );
+			Deploy( groups, deployedPlans: null );
 
 			return;
 		}
 
 		if( latest.Completed )
 		{
-			Deploy( groups, latest.Name, deployedPlans: null, latest );
+			Deploy( groups, latest, deployedPlans: null);
 
 			return;
 		}
@@ -58,7 +58,7 @@ public class DeploymentEngine(
 		// the order the bundle lists plans in, which is only partly determined — plans with no
 		// dependency between them are ordered by registration, which the journal never records.
 		// An empty set resumes at the release's first plan, without journaling its start again.
-		Deploy( groups, latest.Name, journal.GetDeployedPlans( latest.Name, driver ).ToList(), latest );
+		Deploy( groups, latest, journal.GetDeployedPlans( latest.Name, driver ).ToList());
 	}
 
 	/// <summary>
@@ -66,21 +66,11 @@ public class DeploymentEngine(
 	/// inside <paramref name="lastGroup"/> — which must then be one of <paramref name="groups"/> —
 	/// skipping the plans it names; <paramref name="lastGroup"/> alone hands over to the group
 	/// depending on it; neither starts at the bundle's first group.
-	/// <paramref name="journaled"/> is diagnostic context for refusals only.
+	/// <paramref name="latestJournaledRelease"/> is diagnostic context for refusals only.
 	/// </summary>
-	private void Deploy(
-		List<ReleaseGroup> groups, string? lastGroup, IReadOnlyCollection<string>? deployedPlans,
-		JournaledRelease? journaled = null )
+	private void Deploy(List<ReleaseGroup> groups,
+		JournaledRelease? latestJournaledRelease = null, IReadOnlyCollection<string>? deployedPlans = null)
 	{
-		StartPoint? start = ResolveStart( groups, lastGroup, deployedPlans, journaled );
-
-		if( start is null )
-		{
-			listener.NothingToDeploy();
-
-			return;
-		}
-
 		IDatabaseTransaction? transaction = null;
 		bool deployedAnything = false;
 
@@ -96,148 +86,197 @@ public class DeploymentEngine(
 
 			transaction = null;
 		}
+		
+		bool firstGroupFound = false, 
+			pseudoReleaseFound = false, 
+			lastGroupDeployed = false;
+		
+		ReleaseGroup lastGroup = null;
 
-		try
+		List<(ReleaseGroup, IEnumerable<string>)> groupsToDeploy = new();
+
+		foreach (ReleaseGroup group in groups)
 		{
-			for( int index = start.Group; index < groups.Count; index++ )
+			if (pseudoReleaseFound || (latestJournaledRelease is not null && latestJournaledRelease.Name.Length == 0 && latestJournaledRelease.Completed))
+				throw new IncompatibleBundleException(
+					latestJournaledRelease,
+					$"A pseudo bundle cannot be followed by other releases");
+
+			lastGroup = group;
+			pseudoReleaseFound = group.Name.Length == 0;
+
+			// start by working out the first release from the bundle to be deployed
+			if (!firstGroupFound)
 			{
-				ReleaseGroup group = groups[index];
-
-				// only the group deployment resumes into carries deployed plans, and its start
-				// was journaled by the run that began it
-				IReadOnlySet<string>? deployed = index == start.Group ? start.DeployedPlans : null;
-				List<BundleManifestPlan> pending;
-
-				if( deployed is null )
-					pending = group.Plans;
-				else
+				// if database has no previous bundle deployment
+				if (latestJournaledRelease is null)
 				{
-					pending = [];
+					// Bundle must include very first release, which has no dependency.
+					// If first release in the bundle has dependency, and therefore doesn't include very first release,
+					// bundle is incomplete because first release in the bundle can't have any dependency
+					if (group.HasDependency)
+						throw new IncompatibleBundleException(
+							null,
+							$"this bundle continues from {Describe(groups[0].Dependency)} "
+							+ "but the database has no deployed releases.");
 
-					foreach( BundleManifestPlan plan in group.Plans )
-						if( deployed.Contains( plan.Name ) )
-							listener.SkippingPlan( group.Name, plan.Name );
-						else
-							pending.Add( plan );
+					groupsToDeploy.Add((group, Array.Empty<string>()));
+					firstGroupFound = true;
+					continue;
 				}
 
-				deployedAnything = true;
-
-				if( deployed is null )
+				// database has a previous deployment;
+				
+				// If last deployed release is found
+				if (string.Equals(latestJournaledRelease.Name, group.Name, StringComparison.Ordinal))
 				{
-					listener.DeployingRelease( group.Name );
-					journal.DeployingRelease( new DeploymentUnit( group.Name, group.Description ), Transaction() );
+					// if last deployed release was completed, skip to next release in bundle
+					if (latestJournaledRelease.Completed)
+					{
+						listener.SkippingRelease(latestJournaledRelease.Name);
+						firstGroupFound = true;
+						continue;
+					}
+
+					// if last deployed release was not yet completed;
+					
+					// throw exception if deployed plans from that release are not in the bundle,
+					// which indicates the release has been changed and therefore
+					// the database should be restored from a clean backup
+					EnsureDeployedPlansAreInBundleRelease(latestJournaledRelease, deployedPlans!, group);
+					
+					// otherwise deploy release
+					groupsToDeploy.Add((group, deployedPlans!.AsEnumerable()));
+
+					firstGroupFound = true;
+					continue;
 				}
 
-				for( int position = 0; position < pending.Count; position++ )
+				// If last deployed release is dependency for next release in bundle
+				if (string.Equals(latestJournaledRelease.Name, group.Dependency, StringComparison.Ordinal))
 				{
-					DeployPlan( group.Name, pending[position], Transaction, listener );
-
-					if( commitLevel == DeploymentCommitLevel.Plan && position < pending.Count - 1 )
-						CommitBoundary();
+					// If last deployed release was a pseudo-release,
+					// ignore subsequent releases in bundle because
+					// pseudo-release cannot be followed by any other releases:
+					// pseudo-release contains un-released plans and is only possible for test-releases
+					// This scenario usually means the project release structure has changed,
+					// and therefore database should be restored from a clean backup
+					if (latestJournaledRelease.Name.Length == 0)
+					{
+						listener.SkippingRelease(group.Name);
+						continue;
+					}
+					
+					// Otherwise deploy release
+					listener.ContinuingFrom(latestJournaledRelease.Name);
+					groupsToDeploy.Add((group, Array.Empty<string>()));
+					firstGroupFound = true;
+					continue;
 				}
 
-				// reached with nothing pending when the journal's last plan is the release's
-				// last: journaling the completion closes a release that would otherwise stay
-				// incomplete forever and block every later bundle
-				journal.ReleaseDeployed( group.Name, Transaction() );
-				listener.ReleaseDeployed( group.Name );
-
-				CommitBoundary();
+				// Releases prior to last deployed release are skipped
+				listener.SkippingRelease(group.Name);
+				continue;
 			}
 
-			if( !deployedAnything )
-				listener.NothingToDeploy();
+			// Subsequent releases after first to-be-included release are deployed 
+			groupsToDeploy.Add((group, Array.Empty<string>()));
 		}
-		catch
+		
+		// if no new release is found
+		if (groupsToDeploy.Count == 0)
+		{ 
+			// and the last release inspected is not the last release journaled in previous deployment,
+			// throw and error
+			if (latestJournaledRelease is not null && latestJournaledRelease.Name.Length > 0 && !string.Equals(lastGroup.Name, latestJournaledRelease.Name))
+			{
+				throw new IncompatibleBundleException(
+					latestJournaledRelease,
+					$"database is at {Describe( latestJournaledRelease.Name )}, which this bundle neither contains nor continues from." );
+			}
+
+			// otherwise, there's just no new release to deploy
+			listener.NothingToDeploy();
+			return;
+		}
+
+		Stack<(ReleaseGroup release, Stack<string> deployedPlans)> deployedGroups = new();
+		void Deploy(ReleaseGroup release, IEnumerable<string> plansToSkip)
+		{
+			if (latestJournaledRelease is null || !string.Equals(latestJournaledRelease.Name, release.Name))
+			{
+				listener.DeployingRelease(release.Name);
+				journal.DeployingRelease(new DeploymentUnit(release.Name, release.Description),
+					Transaction());
+			}
+
+			// if deployePlans is not null, then we're continuing incomplete release from previous deployment.
+			if (plansToSkip is not null)
+			{
+				// deploy pending plans for the release
+				for (int index = 0; index < release.Plans.Count; index++)
+				{
+					BundleManifestPlan plan = release.Plans[index];
+						
+					if (plansToSkip.Contains(plan.Name))
+					{
+						listener.SkippingPlan(release.Name, plan.Name);
+						continue;
+					}
+
+					DeployPlan(release.Name, plan, Transaction, listener);
+
+					if (commitLevel == DeploymentCommitLevel.Plan && index < release.Plans.Count - 1)
+						CommitBoundary();
+				}
+			}
+			else // deploy pending plans for the next release
+			{
+				for (int index = 0; index < release.Plans.Count; index++)
+				{
+					BundleManifestPlan plan = release.Plans[index];
+					DeployPlan(release.Name, plan, Transaction, listener);
+
+					if (commitLevel == DeploymentCommitLevel.Plan && index < release.Plans.Count - 1)
+						CommitBoundary();
+				}
+			}
+				
+			journal.ReleaseDeployed(release.Name, Transaction());
+			listener.ReleaseDeployed(release.Name);
+
+			CommitBoundary();
+		}
+		
+		try
+		{
+			foreach ((ReleaseGroup release, IEnumerable<string> plansToSkip) in groupsToDeploy)
+			{
+				Deploy(release, plansToSkip);
+			}
+		}
+		catch (Exception e)
 		{
 			transaction?.Rollback();
-
+			
 			throw;
 		}
 	}
 
-	/// <summary>
-	/// Where deployment starts, or null when the database is already at the end of the bundle.
-	/// Reports the releases and plans skipped on the way, and refuses a bundle that does not
-	/// meet the database where it stands.
-	/// </summary>
-	private StartPoint? ResolveStart(
-		List<ReleaseGroup> groups, string? lastGroup, IReadOnlyCollection<string>? deployedPlans,
-		JournaledRelease? journaled )
+	private static void EnsureDeployedPlansAreInBundleRelease(JournaledRelease? journaledRelease,
+		IReadOnlyCollection<string> deployedPlans, ReleaseGroup bundlePlanGroup)
 	{
-		if( deployedPlans is not null )
+		IEnumerable<string> missingDeployedPlans = deployedPlans.Except(bundlePlanGroup.Plans.Select(plan => plan.Name));
+
+		if( missingDeployedPlans.Any())
 		{
-			// the caller has established that lastGroup is one of these groups
-			int holding = groups.FindIndex(
-				group => string.Equals( group.Name, lastGroup, StringComparison.Ordinal ) );
-
-			ReleaseGroup resuming = groups[holding];
-
-			HashSet<string> names = new ( resuming.Plans.Select( plan => plan.Name ), StringComparer.Ordinal );
-
-			// the journal knows plans this bundle's copy of the release does not have, so the two
-			// are not the same release and no start point in it can be trusted
-			List<string> missing = deployedPlans
-									.Where( plan => !names.Contains( plan ) )
-									.Distinct( StringComparer.Ordinal )
-									.ToList();
-
-			if( missing.Count > 0 )
+			if( deployedPlans is not null )
 				throw new IncompatibleBundleException(
-					journaled,
-					$"the database has deployed plans of {Describe( resuming.Name )} that this bundle does "
-					+ $"not contain: {string.Join( ", ", missing.Select( plan => $"'{plan}'" ) )}; deploy a "
+					journaledRelease,
+					$"the database has deployed plans of {Describe( journaledRelease.Name )} that this bundle does "
+					+ $"not contain: {string.Join( ", ", missingDeployedPlans.Select( plan => $"'{plan}'" ) )}; deploy a "
 					+ "bundle that contains them, or restore the database." );
-
-			InformSkip( groups, holding );
-
-			return new StartPoint( holding, new HashSet<string>( deployedPlans, StringComparer.Ordinal ) );
 		}
-
-		if( lastGroup is null )
-		{
-			// a continuation bundle cannot be the first thing a database ever sees
-			if( groups.Count > 0 && groups[0].Dependency.Length > 0 )
-				throw new IncompatibleBundleException(
-					null,
-					$"this bundle continues from {Describe( groups[0].Dependency )} "
-					+ "but the database has no deployed releases." );
-
-			return new StartPoint( 0, DeployedPlans: null );
-		}
-
-		// an empty name is the unreleased-plans pseudo-release, which nothing can depend on —
-		// matching it here would match the first release of any lineage-starting bundle, whose
-		// dependency is empty too, and redeploy the bundle over a database it does not fit
-		if( lastGroup.Length > 0 )
-		{
-			int dependant = groups.FindIndex(
-				group => string.Equals( group.Dependency, lastGroup, StringComparison.Ordinal ) );
-
-			if( dependant >= 0 )
-			{
-				if( !groups.Any( group => string.Equals( group.Name, lastGroup, StringComparison.Ordinal ) ) )
-					listener.ContinuingFrom( lastGroup );
-
-				InformSkip( groups, dependant );
-
-				return new StartPoint( dependant, DeployedPlans: null );
-			}
-		}
-
-		// nothing in the bundle follows the journaled release: it is either the bundle's own
-		// end, or a release this bundle has nothing to do with
-		if( groups.Count > 0 && string.Equals( groups[^1].Name, lastGroup, StringComparison.Ordinal ) )
-		{
-			InformSkip( groups, groups.Count );
-
-			return null;
-		}
-
-		throw new IncompatibleBundleException(
-			journaled,
-			$"database is at {Describe( lastGroup )}, which this bundle neither contains nor continues from." );
 	}
 
 	private void InformSkip( List<ReleaseGroup> groups, int upTo )
@@ -337,7 +376,13 @@ public class DeploymentEngine(
 	}
 
 	private sealed record ReleaseGroup(
-		string Name, string Description, string Dependency, List<BundleManifestPlan> Plans );
+		string Name,
+		string Description,
+		string Dependency,
+		List<BundleManifestPlan> Plans)
+	{
+		public bool HasDependency => !string.IsNullOrEmpty( Dependency );
+	}
 
 	/// <summary>
 	/// The group deployment starts at and, when that group is being resumed, the names of its
