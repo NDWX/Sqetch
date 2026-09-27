@@ -220,6 +220,10 @@ public class DeployCliTests : IDisposable
 
 		string targz = WriteBundle( "demo.tar.gz", TarGzBundleType.TypeName );
 
+		// the two bundles hold the same release, so the second is a deployment in its own right
+		// only against a database that has not seen the first
+		_journal.Forget();
+
 		Assert.Equal(
 			0,
 			Run( "deploy", targz, "--driver", "pg", "--pg-host", "h", "--pg-database", "d" ).ExitCode );
@@ -228,7 +232,7 @@ public class DeployCliTests : IDisposable
 	[Fact]
 	public void UpToDateDatabaseReportsSoAndTouchesNothing()
 	{
-		_journal.Latest = new JournaledRelease( "2026.07", Complete: true );
+		_journal.Latest = new JournaledRelease( "2026.07", Completed: true );
 		_journal.DeployedPlans["2026.07"] = ["table", "index"];
 
 		CommandAppResult result = Run(
@@ -242,7 +246,7 @@ public class DeployCliTests : IDisposable
 	[Fact]
 	public void ContinuationBundleIsRefusedWhenTheJournaledPredecessorIsIncomplete()
 	{
-		_journal.Latest = new JournaledRelease( "2026.06", Complete: false );
+		_journal.Latest = new JournaledRelease( "2026.06", Completed: false );
 
 		string bundle = WriteBundle( "continuation.zip", dependency: "2026.06" );
 

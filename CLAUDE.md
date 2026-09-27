@@ -66,16 +66,20 @@ dotnet run --project Pug.Sqetch.Deployment.Cli -- <args>   # run the 'sqetch-dep
   bundle* holding only the releases after the named one.
 - **Deploy semantics** (`DeploymentEngine`): the journal alone decides where deployment starts,
   in four branches — nothing journaled deploys the bundle whole; an **incompletely** deployed
-  release must be *contained* in the bundle and resumes at the plan after its last deployed one;
-  a **completely** deployed release hands over to whichever group *depends* on it, which may be
-  a release the bundle does not contain (continuation bundle). Each branch calls the private
-  `Deploy( groups, lastGroup, lastPlan )`: `lastPlan` resumes inside the release holding it
-  (and journals that release's completion when it is its last plan), `lastGroup` alone starts at
-  the group depending on it, neither starts at the first group — refusing when the first group
-  has a dependency. `IChangeJournalWriter.GetLatestRelease` returns `JournaledRelease?`
-  (`null` = fresh database, `Name == ""` = the unreleased-plans pseudo-release, `Complete` = its
-  `ReleaseDeployed` was journaled) and `GetDeployedPlans` is **ordered**, oldest first — the
-  engine takes its last element. The pseudo-release depends on the bundle's last real release,
+  release must be *contained* in the bundle and resumes inside it; a **completely** deployed
+  release hands over to whichever group *depends* on it, which may be a release the bundle does
+  not contain (continuation bundle). Each branch calls the private
+  `Deploy( groups, lastGroup, deployedPlans )`: `deployedPlans` resumes inside `lastGroup`,
+  skipping the plans it **names** and deploying the rest in bundle order (and journaling that
+  release's completion when none are left, without journaling its start again); `lastGroup` alone
+  starts at the group depending on it; neither starts at the first group — refusing when the first
+  group has a dependency. `IChangeJournalWriter.GetLatestRelease` returns `JournaledRelease?`
+  (`null` = fresh database, `Name == ""` = the unreleased-plans pseudo-release, `Completed` = its
+  `ReleaseDeployed` was journaled) and `GetDeployedPlans` is an **unordered set** — resume is by
+  membership, never by position, because a release's plans are only partly ordered (disjoint
+  dependency chains can be interleaved either way, and the journal records nothing that pins
+  which interleaving a past run used). A journaled plan the bundle's copy of the release lacks is
+  `IncompatibleBundleException`. The pseudo-release depends on the bundle's last real release,
   so it is an ordinary link in the chain; nothing may depend on *it*, so a database left at the
   pseudo-release is refused rather than matched to a lineage-starting bundle. A completed
   release is never resumed into, so plans a bundle gained for one are not deployed — test

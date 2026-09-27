@@ -7,13 +7,33 @@ using Pug.Sqetch.Deployment.DatabaseDriver.Abstractions;
 namespace Pug.Sqetch.Tests.Deployment;
 
 /// <summary>
-/// Fakes for the deployment tier: driver, transactions and journal writer share one
-/// ordered event log so tests can assert the exact interleaving of scripts, journal
-/// entries and transaction boundaries.
+/// Fakes for the deployment tier. They model two different things, and a test should know which
+/// one it is asserting:
+/// <list type="bullet">
+/// <item><description>the <em>result</em> of a deployment — the journal state a later run would
+/// read back (<see cref="FakeJournalWriter"/>) and the step scripts the database actually kept
+/// (<see cref="FakeDatabaseDriver.AppliedScripts"/>). Both become visible only when the
+/// transaction that produced them commits, as a real database's would.</description></item>
+/// <item><description>how it got there — <see cref="FakeDatabaseDriver.Events"/> for the exact
+/// interleaving of scripts, journal entries and transaction boundaries, and
+/// <see cref="FakeTransaction.Journaled"/> for what one transaction made durable
+/// together.</description></item>
+/// </list>
+/// <see cref="RecordingListener"/> is neither: it is the host's progress channel.
 /// </summary>
 public sealed class FakeDatabaseDriver : IDatabaseDriver
 {
+	/// <summary>
+	/// Every driver, transaction and journal call in the order it was made, committed or not.
+	/// Assert against this only where the interleaving or the transaction boundaries are the
+	/// subject of the test.
+	/// </summary>
 	public List<string> Events { get; } = [];
+
+	/// <summary>
+	/// Step scripts of committed transactions, in the order they ran — what the database kept.
+	/// </summary>
+	public List<string> AppliedScripts { get; } = [];
 
 	/// <summary>Scripts whose execution should fail.</summary>
 	public HashSet<string> FailingScripts { get; } = [];
@@ -37,11 +57,22 @@ public sealed class FakeDatabaseDriver : IDatabaseDriver
 
 public sealed class FakeTransaction( FakeDatabaseDriver driver, int number ) : IDatabaseTransaction
 {
+	private readonly List<Action> _onCommit = [];
+
 	public int Number { get; } = number;
 
 	public bool Committed { get; private set; }
 
 	public bool RolledBack { get; private set; }
+
+	/// <summary>
+	/// The journal entries written in this transaction, so a test can assert what became durable
+	/// together — notably that a release's completion shares its last plan's transaction.
+	/// </summary>
+	public List<string> Journaled { get; } = [];
+
+	/// <summary>Registers state this transaction makes durable when, and only when, it commits.</summary>
+	public void OnCommit( Action apply ) => _onCommit.Add( apply );
 
 	public void ExecuteStepScript( string script )
 	{
@@ -49,6 +80,7 @@ public sealed class FakeTransaction( FakeDatabaseDriver driver, int number ) : I
 			throw new InvalidOperationException( $"script rejected: {script}" );
 
 		driver.Events.Add( $"script #{Number} {script}" );
+		OnCommit( () => driver.AppliedScripts.Add( script ) );
 	}
 
 	public void ExecuteJournalingStatement( string statement ) => driver.Events.Add( $"journal-statement #{Number} {statement}" );
@@ -58,44 +90,72 @@ public sealed class FakeTransaction( FakeDatabaseDriver driver, int number ) : I
 	public void Rollback()
 	{
 		RolledBack = true;
+
+		// nothing this transaction wrote survives, journal entries included
+		_onCommit.Clear();
+
 		driver.Events.Add( $"rollback #{Number}" );
 	}
 
 	public void Commit()
 	{
 		Committed = true;
+
+		foreach( Action apply in _onCommit )
+			apply();
+
+		_onCommit.Clear();
+
 		driver.Events.Add( $"commit #{Number}" );
 	}
 }
 
+/// <summary>
+/// A journal whose state is the deployment's result: seed it to describe an earlier run, and read
+/// it back afterwards to assert what this run recorded. Writes land only when their transaction
+/// commits, so a rolled-back release leaves no trace.
+/// </summary>
 public sealed class FakeJournalWriter( FakeDatabaseDriver driver ) : IChangeJournalWriter
 {
 	public JournaledRelease? Latest { get; set; }
 
 	/// <summary>
-	/// Per release, its deployed plans in deployment order, oldest first — the order
-	/// <see cref="IChangeJournalWriter.GetDeployedPlans"/> promises, and the engine resumes at
-	/// the plan following the last of them.
+	/// Per release, the plans of it the journal holds. Order is deliberately not significant:
+	/// the engine treats them as a set, so tests may seed them in any order to prove that.
 	/// </summary>
 	public Dictionary<string, List<string>> DeployedPlans { get; } = [];
 
+	/// <summary>
+	/// Releases whose <em>start</em> this journal recorded, in order. A release deployment
+	/// resumes into is absent: the run that began it recorded that already.
+	/// </summary>
+	public List<string> StartedReleases { get; } = [];
+
 	public void DeployingRelease( DeploymentUnit unit, IDatabaseTransaction transaction )
-		=> driver.Events.Add( $"deploying-release {Tx( transaction )} {unit.Name}" );
+		=> Record(
+			transaction, "deploying-release", unit.Name,
+			() =>
+			{
+				StartedReleases.Add( unit.Name );
+				Latest = new JournaledRelease( unit.Name, Completed: false );
+			} );
 
 	public void DeployingPlan( Plan unit, IDatabaseTransaction transaction )
-		=> driver.Events.Add( $"deploying-plan {Tx( transaction )} {unit.Release}/{unit.Name}" );
+		=> Record( transaction, "deploying-plan", $"{unit.Release}/{unit.Name}" );
 
 	public void DeployingStep( Step unit, IDatabaseTransaction transaction )
-		=> driver.Events.Add( $"deploying-step {Tx( transaction )} {unit.Release}/{unit.Plan}/{unit.Name}" );
+		=> Record( transaction, "deploying-step", $"{unit.Release}/{unit.Plan}/{unit.Name}" );
 
 	public void StepDeployed( string release, string plan, string name, IDatabaseTransaction transaction )
-		=> driver.Events.Add( $"step-deployed {Tx( transaction )} {release}/{plan}/{name}" );
+		=> Record( transaction, "step-deployed", $"{release}/{plan}/{name}" );
 
 	public void PlanDeployed( string release, string name, IDatabaseTransaction transaction )
-		=> driver.Events.Add( $"plan-deployed {Tx( transaction )} {release}/{name}" );
+		=> Record( transaction, "plan-deployed", $"{release}/{name}", () => Plans( release ).Add( name ) );
 
 	public void ReleaseDeployed( string name, IDatabaseTransaction transaction )
-		=> driver.Events.Add( $"release-deployed {Tx( transaction )} {name}" );
+		=> Record(
+			transaction, "release-deployed", name,
+			() => Latest = new JournaledRelease( name, Completed: true ) );
 
 	public void RollingBackRelease( string name, IDatabaseTransaction transaction ) => throw new NotSupportedException();
 
@@ -109,12 +169,33 @@ public sealed class FakeJournalWriter( FakeDatabaseDriver driver ) : IChangeJour
 
 	public void RolledBackRelease( string name, IDatabaseTransaction transaction ) => throw new NotSupportedException();
 
+	/// <summary>Resets the journal to a fresh database, for a test that deploys more than once.</summary>
+	public void Forget()
+	{
+		Latest = null;
+
+		DeployedPlans.Clear();
+		StartedReleases.Clear();
+	}
+
 	public JournaledRelease? GetLatestRelease( IDatabaseDriver _ ) => Latest;
 
 	public IEnumerable<string> GetDeployedPlans( string release, IDatabaseDriver _ )
 		=> DeployedPlans.TryGetValue( release, out List<string>? plans ) ? plans : [];
 
-	private static string Tx( IDatabaseTransaction transaction ) => $"#{( (FakeTransaction)transaction ).Number}";
+	private List<string> Plans( string release )
+		=> DeployedPlans.TryGetValue( release, out List<string>? plans ) ? plans : DeployedPlans[release] = [];
+
+	private void Record( IDatabaseTransaction transaction, string verb, string target, Action? durable = null )
+	{
+		FakeTransaction fake = (FakeTransaction)transaction;
+
+		driver.Events.Add( $"{verb} #{fake.Number} {target}" );
+		fake.Journaled.Add( $"{verb} {target}" );
+
+		if( durable is not null )
+			fake.OnCommit( durable );
+	}
 }
 
 public sealed class RecordingListener : IDeploymentListener

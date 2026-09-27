@@ -102,7 +102,7 @@ public interface IChangeJournalWriter
     /// Retrieves the latest journaled release regardless of completion.
     /// </summary>
     /// <param name="driver">The database driver used to query the release information.</param>
-    /// <returns>The latest journaled release; null when nothing has been journaled yet. An empty name is valid: the pseudo-release of unreleased plans. Complete is true only when the release's completion was journaled; false means plans of that release remain to deploy.</returns>
+    /// <returns>The latest journaled release; null when nothing has been journaled yet. An empty name is valid: the pseudo-release of unreleased plans. Completed is true only when the release's completion was journaled; false means plans of that release remain to deploy.</returns>
 
     JournaledRelease? GetLatestRelease(IDatabaseDriver driver);
 
@@ -111,6 +111,6 @@ public interface IChangeJournalWriter
     /// </summary>
     /// <param name="release">The name of the release for which to retrieve the deployed plans.</param>
     /// <param name="driver">The database driver used to query the deployment data.</param>
-    /// <returns>The deployed plan names associated with the specified release, in deployment order, oldest first. The order is part of the contract: deployment of an incompletely deployed release resumes at the plan following the last one of this sequence.</returns>
+    /// <returns>The names of the plans of the specified release that have been deployed, in no particular order and without duplicates. Deployment of an incompletely deployed release treats them as a set, skipping the plans they name and deploying the rest of the release in bundle order, so no ordering guarantee is required of the implementation.</returns>
     IEnumerable<string> GetDeployedPlans(string release, IDatabaseDriver driver);
 }

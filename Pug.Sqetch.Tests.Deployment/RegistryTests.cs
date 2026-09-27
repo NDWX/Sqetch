@@ -33,7 +33,7 @@ public class RegistryTests
 		registry.Register( "table", () => new FakeJournalWriter( driver ) );
 		registry.Register(
 			"audit",
-			() => new FakeJournalWriter( driver ) { Latest = new JournaledRelease( "marker", Complete: true ) },
+			() => new FakeJournalWriter( driver ) { Latest = new JournaledRelease( "marker", Completed: true ) },
 			asDefault: true );
 
 		Assert.Equal( "audit", registry.DefaultName );
