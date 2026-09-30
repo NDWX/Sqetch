@@ -164,6 +164,38 @@ public class DeployCliTests : IDisposable
 	}
 
 	[Fact]
+	public void TheRollbackModeIsValidated()
+	{
+		CommandAppResult result = Run(
+			"deploy", WriteBundle( "demo.zip" ), "--driver", "pg", "--pg-host", "h", "--pg-database", "d",
+			"--rollback", "sometimes" );
+
+		Assert.Equal( 1, result.ExitCode );
+		Assert.Contains( "--rollback", result.Output );
+	}
+
+	/// <summary>
+	/// Undoing finalized releases on purpose is not a thing to do; the mode exists to prove a test
+	/// bundle applies cleanly and leave the database as it was.
+	/// </summary>
+	[Fact]
+	public void RollingBackOnSuccessNeedsATestBundle()
+	{
+		CommandAppResult result = Run(
+			"deploy", WriteBundle( "demo.zip" ), "--driver", "pg", "--pg-host", "h", "--pg-database", "d",
+			"--rollback", "on-success" );
+
+		Assert.Equal( 1, result.ExitCode );
+
+		string message = Regex.Replace( result.Output, @"\s+", " " );
+
+		Assert.Contains( "needs a test bundle", message );
+
+		// refused before the database was touched beyond reading the journal
+		Assert.Empty( _driver.AppliedScripts );
+	}
+
+	[Fact]
 	public void BundleMissingItsManifestOrAScriptFails()
 	{
 		string empty = Path.Combine( _root, "empty" );

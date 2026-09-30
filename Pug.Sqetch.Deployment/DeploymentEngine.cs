@@ -38,7 +38,8 @@ public class DeploymentEngine(
 	IBundleReader reader,
 	IBundleLayout layout,
 	DeploymentCommitLevel commitLevel,
-	IDeploymentListener listener )
+	IDeploymentListener listener,
+	DeploymentRollbackMode rollback = DeploymentRollbackMode.None )
 {
 	public void Deploy( BundleManifest manifest )
 	{
@@ -153,6 +154,13 @@ public class DeploymentEngine(
 		IDatabaseTransaction? transaction = null;
 		bool deployedAnything = false;
 
+		// what this run has put beyond reach of a transaction rollback, in deployment order, so a
+		// compensating rollback can undo it in reverse. A plan moves from pending to committed only
+		// when its transaction commits: anything still pending when a transaction rolls back never
+		// reached the database and needs no compensation.
+		List<(ReleaseGroup Release, BundleManifestPlan Plan)> committed = new ();
+		List<(ReleaseGroup Release, BundleManifestPlan Plan)> pending = new ();
+
 		IDatabaseTransaction Transaction() => transaction ??= driver.BeginTransaction();
 
 		void CommitBoundary()
@@ -164,6 +172,9 @@ public class DeploymentEngine(
 			listener.Committed();
 
 			transaction = null;
+
+			committed.AddRange( pending );
+			pending.Clear();
 		}
 		
 		bool firstGroupFound = false, 
@@ -279,7 +290,6 @@ public class DeploymentEngine(
 			return;
 		}
 
-		Stack<(ReleaseGroup release, Stack<string> deployedPlans)> deployedGroups = new();
 		void Deploy(ReleaseGroup release, IEnumerable<string> plansToSkip)
 		{
 			if (latestJournaledRelease is null || !string.Equals(latestJournaledRelease.Name, release.Name))
@@ -303,6 +313,7 @@ public class DeploymentEngine(
 					}
 
 					DeployPlan(release.Name, plan, journal, Transaction, listener);
+					pending.Add( (release, plan) );
 
 					if (commitLevel == DeploymentCommitLevel.Plan && index < release.Plans.Count - 1)
 						CommitBoundary();
@@ -314,6 +325,7 @@ public class DeploymentEngine(
 				{
 					BundleManifestPlan plan = release.Plans[index];
 					DeployPlan(release.Name, plan, journal, Transaction, listener);
+					pending.Add( (release, plan) );
 
 					if (commitLevel == DeploymentCommitLevel.Plan && index < release.Plans.Count - 1)
 						CommitBoundary();
@@ -333,12 +345,107 @@ public class DeploymentEngine(
 				Deploy(release, plansToSkip);
 			}
 		}
-		catch (Exception e)
+		catch( Exception exception )
 		{
 			transaction?.Rollback();
-			
+
+			// the open transaction took its own plans back; only what committed needs compensating
+			pending.Clear();
+
+			if( rollback == DeploymentRollbackMode.OnError && committed.Count > 0 )
+				RollBack( journal, committed, $"deployment failed: {exception.Message}" );
+
 			throw;
 		}
+
+		if( rollback == DeploymentRollbackMode.OnSuccess && committed.Count > 0 )
+			RollBack( journal, committed, "deployment succeeded; rolling back as requested" );
+	}
+
+	/// <summary>
+	/// Undoes <paramref name="deployed"/> in reverse, running each step's rollback script and
+	/// journaling through the RollingBack/RolledBack slots. This is a compensating pass, not a
+	/// transaction rollback: by the time it runs the work is committed, which is why it is the only
+	/// way to undo a deployment that committed at plan boundaries.
+	/// </summary>
+	private void RollBack(
+		StatementJournal journal, List<(ReleaseGroup Release, BundleManifestPlan Plan)> deployed, string reason )
+	{
+		listener.RollingBack( reason );
+
+		IDatabaseTransaction? transaction = null;
+
+		IDatabaseTransaction Transaction() => transaction ??= driver.BeginTransaction();
+
+		void CommitBoundary()
+		{
+			if( transaction is null )
+				return;
+
+			transaction.Commit();
+
+			transaction = null;
+		}
+
+		try
+		{
+			for( int index = deployed.Count - 1; index >= 0; index-- )
+			{
+				(ReleaseGroup release, BundleManifestPlan plan) = deployed[index];
+
+				// a release's plans are contiguous in deployment order, so its boundaries are just
+				// where the neighbouring entry names a different release
+				bool opensRelease = index == deployed.Count - 1
+									|| !string.Equals( deployed[index + 1].Release.Name, release.Name, StringComparison.Ordinal );
+
+				bool closesRelease = index == 0
+									|| !string.Equals( deployed[index - 1].Release.Name, release.Name, StringComparison.Ordinal );
+
+				if( opensRelease )
+					journal.RollingBackRelease( release.Name, Transaction() );
+
+				listener.RollingBackPlan( release.Name, plan.Name );
+				journal.RollingBackPlan( release.Name, plan.Name, Transaction() );
+
+				for( int position = plan.Steps.Count - 1; position >= 0; position-- )
+				{
+					BundleManifestStep step = plan.Steps[position];
+
+					journal.RollingBackStep( release.Name, plan.Name, step.Name, Transaction() );
+
+					try
+					{
+						Transaction().ExecuteStepScript(
+							ReadScript( plan.Name, step.Name, StepScriptKind.Rollback ) );
+					}
+					catch( Exception exception )
+					{
+						throw new RollbackFailedException( release.Name, plan.Name, step.Name, exception );
+					}
+
+					journal.RolledBackStep( release.Name, plan.Name, step.Name, Transaction() );
+				}
+
+				journal.RolledBackPlan( release.Name, plan.Name, Transaction() );
+
+				if( closesRelease )
+				{
+					journal.RolledBackRelease( release.Name, Transaction() );
+
+					CommitBoundary();
+				}
+				else if( commitLevel == DeploymentCommitLevel.Plan )
+					CommitBoundary();
+			}
+		}
+		catch
+		{
+			transaction?.Rollback();
+
+			throw;
+		}
+
+		listener.RolledBack();
 	}
 
 	private static void EnsureDeployedPlansAreInBundleRelease(JournaledRelease? journaledRelease,
@@ -375,7 +482,7 @@ public class DeploymentEngine(
 			listener.DeployingStep( release, plan.Name, step.Name );
 			journal.DeployingStep( release, plan.Name, step.Name, step.Description, transaction() );
 
-			string script = ReadDeployScript( plan.Name, step.Name );
+			string script = ReadScript( plan.Name, step.Name, StepScriptKind.Deploy );
 
 			try
 			{
@@ -394,9 +501,9 @@ public class DeploymentEngine(
 		listener.PlanDeployed( release, plan.Name );
 	}
 
-	private string ReadDeployScript( string plan, string step )
+	private string ReadScript( string plan, string step, StepScriptKind kind )
 	{
-		using Stream entry = reader.Open( layout.ScriptPath( plan, step, StepScriptKind.Deploy ) );
+		using Stream entry = reader.Open( layout.ScriptPath( plan, step, kind ) );
 		using StreamReader content = new ( entry );
 
 		return content.ReadToEnd();

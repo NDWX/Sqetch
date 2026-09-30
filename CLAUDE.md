@@ -133,10 +133,20 @@ dotnet run --project Pug.Sqetch.Deployment.Cli -- deploy <bundle> --driver sqlit
   release boundaries per `DeploymentCommitLevel`, with `ReleaseDeployed` always journaled in the
   same transaction as the release's last plan. Neither the prepare nor the read commit is reported
   to `IDeploymentListener`: they are not deployment progress. On failure the open transaction rolls
-  back — earlier commits stand. The rollback command parses fully but is not implemented; when it
-  is, it cannot be "roll back the open transaction", since rollback will be requestable regardless
-  of commit level and earlier boundary commits are already durable — it has to be a compensating
-  path running rollback scripts in reverse through the `RollingBack*`/`RolledBack*` slots.
+  back — earlier commits stand.
+- **Rollback is compensating, not transactional** (`DeploymentRollbackMode`, `deploy --rollback`):
+  `on-error` undoes what the run committed after a failure, `on-success` undoes a deployment that
+  worked — for proving a test bundle applies cleanly — and is refused for a bundle of finalized
+  releases. It runs each step's `rollback.sql` in reverse (releases, then plans, then steps) and
+  journals through the `RollingBack*`/`RolledBack*` slots. It is **independent of
+  `DeploymentCommitLevel`**, which is the whole point: at plan level the earlier plans are already
+  durable and no database transaction could take them back. The engine therefore records committed
+  units — a plan moves from pending to committed only when its transaction commits, so a plan the
+  open transaction took back is never compensated for a change that never reached the database. A
+  failing rollback script throws `RollbackFailedException` and replaces the failure that triggered
+  it: a half-compensated database is worse than either end state, and the reason was already
+  reported to the listener. The standalone `sqetch-deploy rollback` command is still a stub;
+  rollback today is a mode of `deploy`.
 - **Database drivers are ADO.NET wrappers, not SQL translators**: `AdoDatabaseDriver` holds the
   connection, the transactions on it and the command plumbing; a provider project supplies only a
   connection factory and a factory implementing `IDatabaseDriverFactory`. Journaling parameters are

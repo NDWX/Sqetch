@@ -27,11 +27,19 @@ public class DeploymentSettings : CommandSettings
 	[Description( "Commit progress after every 'plan' or only after every 'release'; default release" )]
 	public string CommitLevel { get; init; } = "release";
 
+	[CommandOption( "--rollback <MODE>" )]
+	[Description(
+		"Undo the deployment: 'on-error' after a failure, 'on-success' after a successful test "
+		+ "deployment; default none" )]
+	public string Rollback { get; init; } = "none";
+
 	[CommandOption( "--log <PATH>" )]
 	[Description( "Append timestamped progress lines to this log file" )]
 	public string? Log { get; init; }
 
 	internal DeploymentCommitLevel Level { get; private set; } = DeploymentCommitLevel.Release;
+
+	internal DeploymentRollbackMode RollbackMode { get; private set; } = DeploymentRollbackMode.None;
 
 	internal TimeSpan StepScriptTimeout
 		=> TimeoutSeconds == 0 ? Timeout.InfiniteTimeSpan : TimeSpan.FromSeconds( TimeoutSeconds );
@@ -48,6 +56,27 @@ public class DeploymentSettings : CommandSettings
 			Level = DeploymentCommitLevel.Plan;
 		else if( !string.Equals( CommitLevel, "release", StringComparison.OrdinalIgnoreCase ) )
 			return ValidationResult.Error( "--commit-level must be 'plan' or 'release'" );
+
+		switch( Rollback.ToLowerInvariant() )
+		{
+			case "none":
+				RollbackMode = DeploymentRollbackMode.None;
+
+				break;
+
+			case "on-error":
+				RollbackMode = DeploymentRollbackMode.OnError;
+
+				break;
+
+			case "on-success":
+				RollbackMode = DeploymentRollbackMode.OnSuccess;
+
+				break;
+
+			default:
+				return ValidationResult.Error( "--rollback must be 'none', 'on-error' or 'on-success'" );
+		}
 
 		return ValidationResult.Success();
 	}
