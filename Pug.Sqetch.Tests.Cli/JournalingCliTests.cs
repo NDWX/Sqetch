@@ -195,4 +195,77 @@ public class JournalingCliTests : IDisposable
 		Assert.Equal( 1, result.ExitCode );
 		Assert.Contains( "is not set", result.Output );
 	}
+
+	// ------------------------------------------------------------------ parameters
+
+	[Fact]
+	public void ParametersListsEverySlotWithTheParametersItsStatementsMayUse()
+	{
+		InitializeProject();
+
+		CommandAppResult result = Run( "journaling", "parameters" );
+
+		Assert.Equal( 0, result.ExitCode );
+
+		string[] lines = result.Output.Split( '\n', StringSplitOptions.RemoveEmptyEntries );
+
+		Assert.Equal( 15, lines.Length );
+		Assert.Contains( lines, line => line.StartsWith( "DeployingStep\t" ) );
+
+		// shown with the '@' a maintainer types, narrowing to the unit the slot names
+		Assert.Contains( "DeployingStep\t@project @release @plan @step @description", result.Output );
+		Assert.Contains( "GetLatestRelease\t@project", result.Output );
+	}
+
+	[Fact]
+	public void ParametersNarrowsToOneSlot()
+	{
+		InitializeProject();
+
+		CommandAppResult result = Run( "journaling", "parameters", "getdeployedplans" );
+
+		Assert.Equal( 0, result.ExitCode );
+		Assert.Equal( "GetDeployedPlans\t@project @release", result.Output.Trim() );
+	}
+
+	[Fact]
+	public void ParametersRendersAsJson()
+	{
+		InitializeProject();
+
+		CommandAppResult result = Run( "journaling", "parameters", "PlanDeployed", "-o", "json" );
+
+		Assert.Equal( 0, result.ExitCode );
+
+		using JsonDocument json = JsonDocument.Parse( result.Output );
+
+		JsonElement row = Assert.Single( json.RootElement.EnumerateArray().ToArray() );
+
+		Assert.Equal( "PlanDeployed", row.GetProperty( "slot" ).GetString() );
+		Assert.Equal(
+			["@project", "@release", "@plan", "@description"],
+			row.GetProperty( "parameters" ).EnumerateArray().Select( x => x.GetString() ).ToArray() );
+	}
+
+	/// <summary>
+	/// The parameter contract does not depend on the project, so this is the one journaling command
+	/// that answers outside one — a maintainer can consult it before 'project init'.
+	/// </summary>
+	[Fact]
+	public void ParametersNeedsNoProject()
+	{
+		CommandAppResult result = Run( "journaling", "parameters", "PrepareJournal" );
+
+		Assert.Equal( 0, result.ExitCode );
+		Assert.Contains( "@project", result.Output );
+	}
+
+	[Fact]
+	public void ParametersRejectsABadSlotName()
+	{
+		CommandAppResult result = Run( "journaling", "parameters", "NoSuchSlot" );
+
+		Assert.Equal( 1, result.ExitCode );
+		Assert.Contains( "not a journaling slot", result.Output );
+	}
 }

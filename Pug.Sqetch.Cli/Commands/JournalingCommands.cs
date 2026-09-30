@@ -61,6 +61,63 @@ public sealed class JournalingListCommand( IAnsiConsole console ) : Command<Jour
 	}
 }
 
+/// <summary>
+/// Which parameters a slot's statements may use. Answers from the contract alone, so unlike the
+/// other journaling commands it needs no project — a maintainer can consult it before 'project init'
+/// and from anywhere.
+/// </summary>
+public sealed class JournalingParametersCommand( IAnsiConsole console )
+	: Command<JournalingParametersCommand.Settings>
+{
+	public sealed class Settings : OutputSettings
+	{
+		[CommandArgument( 0, "[slot]" )]
+		[Description( "Show only this slot's parameters; every slot when omitted" )]
+		public string? SlotName { get; init; }
+
+		internal JournalingSlot? Slot { get; private set; }
+
+		public override ValidationResult Validate()
+		{
+			if( SlotName is not null )
+			{
+				ValidationResult result = JournalingSlotArgument.Resolve( SlotName, out JournalingSlot resolved );
+
+				if( !result.Successful )
+					return result;
+
+				Slot = resolved;
+			}
+
+			// base parses --output; returning early above would silently ignore it
+			return base.Validate();
+		}
+	}
+
+	private readonly record struct Row( JournalingSlot Slot, IReadOnlyList<string> Parameters );
+
+	protected override int Execute( CommandContext context, Settings settings, CancellationToken cancellationToken )
+	{
+		// shown with the '@' a maintainer actually types; the contract itself names them bare,
+		// because adding any provider prefix is the driver's job
+		List<Row> rows = JournalingSlots.All
+										.Where( slot => settings.Slot is null || slot == settings.Slot )
+										.Select( slot => new Row(
+													slot,
+													JournalingSlots.ParameterNames( slot )
+																	.Select( name => $"@{name}" )
+																	.ToList() ) )
+										.ToList();
+
+		ResultWriter.WriteRows(
+			console, settings.Format, ["Slot", "Parameters"], rows,
+			x => [x.Slot.ToString(), string.Join( " ", x.Parameters )],
+			x => new { slot = x.Slot.ToString(), parameters = x.Parameters } );
+
+		return 0;
+	}
+}
+
 public sealed class JournalingPrintCommand( IAnsiConsole console ) : Command<JournalingPrintCommand.Settings>
 {
 	public sealed class Settings : CommandSettings

@@ -84,7 +84,8 @@ dotnet run --project Pug.Sqetch.Deployment.Cli -- <args>   # run the 'sqetch-dep
   (`now()` evaluates server-side, so a skewed deployment host cannot disorder the journal) and an
   actor (`current_user`). `bundle` refuses until all fifteen are set, naming every missing one;
   rollback slots are required even though rollback deployment is not implemented.
-  CLI: `sqetch journaling list [--statements] [-o <FORMAT>]`, `print <slot>` (verbatim, no markup,
+  CLI: `sqetch journaling list [--statements] [-o <FORMAT>]`, `parameters [<slot>] [-o <FORMAT>]`
+  (answers from the contract alone, so it needs no project), `print <slot>` (verbatim, no markup,
   so `> file.sql` round-trips) and `set <slot>` taking exactly one of an SQL argument, `--file` or
   `--stdin`. SQL beginning with `--` cannot be passed as the argument — a leading-dash positional
   parses as an option — so a comment-first statement needs `--file` or `--stdin`.

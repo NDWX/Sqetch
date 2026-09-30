@@ -91,6 +91,9 @@ public static class SqetchApp
 			journaling.AddCommand<JournalingListCommand>( "list" )
 					.WithDescription( "List every journaling slot and whether it is set" );
 
+			journaling.AddCommand<JournalingParametersCommand>( "parameters" )
+					.WithDescription( "List the parameters each slot's statements may use" );
+
 			journaling.AddCommand<JournalingPrintCommand>( "print" )
 					.WithDescription( "Print one slot's SQL verbatim" );
 
