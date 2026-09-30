@@ -65,6 +65,27 @@ public class GitLegibilityTests
 	}
 
 	[Fact]
+	public void JournalingStatementsAppearAsPlainFileEdits()
+	{
+		using TempProject project = TempProject.Create();
+		using FileSystemProjectStores stores = project.Open();
+
+		Git.Run( project.Root, "init" );
+		Git.Commit( project.Root, "initialize project" );
+
+		stores.InfoStore.SetJournalingStatement( JournalingSlot.PrepareJournal, "create table journal( release text )" );
+
+		string diff = Git.StagedChanges( project.Root );
+		Assert.Contains( "A\tjournaling/PrepareJournal.sql", diff );
+		Git.Commit( project.Root, "set PrepareJournal" );
+
+		stores.InfoStore.SetJournalingStatement( JournalingSlot.PrepareJournal, "create table journal( release text not null )" );
+
+		diff = Git.StagedChanges( project.Root );
+		Assert.Equal( "M\tjournaling/PrepareJournal.sql", diff.Trim() );
+	}
+
+	[Fact]
 	public void FinalizationMovesTheReleaseIntoItsShard()
 	{
 		using TempProject project = TempProject.Create( ShardingCases.Configuration( VersionPrefixShardingStrategy.StrategyName ) );

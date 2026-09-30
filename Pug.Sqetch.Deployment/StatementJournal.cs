@@ -1,0 +1,286 @@
+using System.Data;
+using Pug.Sqetch.Deployment.DatabaseDriver.Abstractions;
+// JournalingSlot, JournalingSlots and JournalingStatements live in Pug.Sqetch.Models, namespace
+// Pug.Sqetch, reachable transitively via the Bundling.Abstractions project reference.
+using Pug.Sqetch;
+
+namespace Pug.Sqetch.Deployment;
+
+/// <summary>
+/// Runs a project's <see cref="JournalingStatements"/> against a database transaction. Replaces
+/// the change-journal-writer family outright — nothing here is pluggable, since the SQL itself is
+/// now the maintainer's business and the driver contributes only parameter binding.
+///
+/// Constructed once, from the statements a bundle carries and the project name; every member then
+/// takes the transaction it runs in, so the engine's call sites read as they always did with the
+/// collaborator swapped underneath them.
+/// </summary>
+public sealed class StatementJournal
+{
+	private readonly JournalingStatements _statements;
+
+	private readonly string _project;
+
+	public StatementJournal( JournalingStatements statements, string project )
+	{
+		ArgumentNullException.ThrowIfNull( statements );
+		ArgumentNullException.ThrowIfNull( project );
+
+		_statements = statements;
+		_project = project;
+	}
+
+	/// <summary>
+	/// Migrates the journal to the shape <see cref="JournalingSlot.PrepareJournal"/>'s statements
+	/// expect. Runs on every deployment, so each statement must be idempotent — safe to run again
+	/// against a database it has already prepared — which the wrapped failure message repeats,
+	/// since this is the slot's real obligation and not obvious from "prepare failed".
+	/// </summary>
+	public void PrepareJournal( IDatabaseTransaction transaction )
+		=> Execute(
+			JournalingSlot.PrepareJournal, Parameters( JournalingSlot.PrepareJournal ), transaction,
+			"PrepareJournal statements must be safe to run again against a database they have already "
+			+ "prepared, since prepare runs on every deployment." );
+
+	/// <summary>
+	/// The release the journal is at, or null for a fresh database. Reads columns by ordinal, not
+	/// name — Oracle folds unquoted identifiers to upper case, and <c>GetOrdinal</c>'s case
+	/// sensitivity and thrown exception type are both provider-defined. Column 0 is the release name
+	/// and must not be NULL: the meaningful unreleased-plans pseudo-release is the empty string, and
+	/// coercing NULL to it would silently place the database at that pseudo-release. Column 1 is
+	/// whether the release completed. More than one row is a corrupt journal and throws.
+	/// </summary>
+	public JournaledRelease? GetLatestRelease( IDatabaseTransaction transaction )
+	{
+		const string slot = nameof(JournalingSlot.GetLatestRelease);
+
+		using IDataReader reader = ExecuteQuery( JournalingSlot.GetLatestRelease, transaction );
+
+		if( reader.FieldCount < 2 )
+			throw new JournalingStatementException(
+				slot, 1,
+				$"must select at least two columns (release name, completed) but selected {reader.FieldCount}." );
+
+		if( !reader.Read() )
+			return null;
+
+		if( reader.IsDBNull( 0 ) )
+			throw new JournalingStatementException(
+				slot, 1,
+				"column 0 (release name) is NULL; the unreleased-plans pseudo-release is the empty "
+				+ "string, never NULL." );
+
+		string name = reader.GetValue( 0 ).ToString() ?? "";
+		bool completed = Completed( slot, reader.GetValue( 1 ) );
+
+		if( reader.Read() )
+			throw new JournalingStatementException(
+				slot, 1, "returned more than one row; a journal reporting two latest releases is corrupt." );
+
+		return new JournaledRelease( name, completed );
+	}
+
+	/// <summary>
+	/// The plans of <paramref name="release"/> the journal holds, in no particular order — resume
+	/// treats them as a set. Column 0 is the plan name and must not be NULL.
+	/// </summary>
+	public IReadOnlyList<string> GetDeployedPlans( string release, IDatabaseTransaction transaction )
+	{
+		const string slot = nameof(JournalingSlot.GetDeployedPlans);
+
+		using IDataReader reader = ExecuteQuery( JournalingSlot.GetDeployedPlans, transaction, release: release );
+
+		List<string> plans = [];
+
+		while( reader.Read() )
+		{
+			if( reader.IsDBNull( 0 ) )
+				throw new JournalingStatementException( slot, 1, "column 0 (plan name) is NULL." );
+
+			plans.Add( reader.GetValue( 0 ).ToString() ?? "" );
+		}
+
+		return plans;
+	}
+
+	public void DeployingRelease( string release, string description, IDatabaseTransaction transaction )
+		=> Execute(
+			JournalingSlot.DeployingRelease,
+			Parameters( JournalingSlot.DeployingRelease, release: release, description: description ),
+			transaction );
+
+	public void DeployingPlan( string release, string plan, string description, IDatabaseTransaction transaction )
+		=> Execute(
+			JournalingSlot.DeployingPlan,
+			Parameters( JournalingSlot.DeployingPlan, release: release, plan: plan, description: description ),
+			transaction );
+
+	public void DeployingStep(
+		string release, string plan, string step, string description, IDatabaseTransaction transaction )
+		=> Execute(
+			JournalingSlot.DeployingStep,
+			Parameters(
+				JournalingSlot.DeployingStep, release: release, plan: plan, step: step, description: description ),
+			transaction );
+
+	public void StepDeployed(
+		string release, string plan, string step, string description, IDatabaseTransaction transaction )
+		=> Execute(
+			JournalingSlot.StepDeployed,
+			Parameters(
+				JournalingSlot.StepDeployed, release: release, plan: plan, step: step, description: description ),
+			transaction );
+
+	public void PlanDeployed( string release, string plan, string description, IDatabaseTransaction transaction )
+		=> Execute(
+			JournalingSlot.PlanDeployed,
+			Parameters( JournalingSlot.PlanDeployed, release: release, plan: plan, description: description ),
+			transaction );
+
+	public void ReleaseDeployed( string release, string description, IDatabaseTransaction transaction )
+		=> Execute(
+			JournalingSlot.ReleaseDeployed,
+			Parameters( JournalingSlot.ReleaseDeployed, release: release, description: description ),
+			transaction );
+
+	public void RollingBackRelease( string release, IDatabaseTransaction transaction )
+		=> Execute(
+			JournalingSlot.RollingBackRelease, Parameters( JournalingSlot.RollingBackRelease, release: release ),
+			transaction );
+
+	public void RollingBackPlan( string release, string plan, IDatabaseTransaction transaction )
+		=> Execute(
+			JournalingSlot.RollingBackPlan,
+			Parameters( JournalingSlot.RollingBackPlan, release: release, plan: plan ), transaction );
+
+	public void RollingBackStep( string release, string plan, string step, IDatabaseTransaction transaction )
+		=> Execute(
+			JournalingSlot.RollingBackStep,
+			Parameters( JournalingSlot.RollingBackStep, release: release, plan: plan, step: step ), transaction );
+
+	public void RolledBackStep( string release, string plan, string step, IDatabaseTransaction transaction )
+		=> Execute(
+			JournalingSlot.RolledBackStep,
+			Parameters( JournalingSlot.RolledBackStep, release: release, plan: plan, step: step ), transaction );
+
+	public void RolledBackPlan( string release, string plan, IDatabaseTransaction transaction )
+		=> Execute(
+			JournalingSlot.RolledBackPlan,
+			Parameters( JournalingSlot.RolledBackPlan, release: release, plan: plan ), transaction );
+
+	public void RolledBackRelease( string release, IDatabaseTransaction transaction )
+		=> Execute(
+			JournalingSlot.RolledBackRelease, Parameters( JournalingSlot.RolledBackRelease, release: release ),
+			transaction );
+
+	/// <summary>
+	/// Runs every statement of <paramref name="slot"/> in order, wrapping a driver failure in
+	/// <see cref="JournalingStatementException"/> naming the slot and the statement's 1-based
+	/// position within it — with several statements per slot, the slot name alone does not say which
+	/// line to look at.
+	/// </summary>
+	private void Execute(
+		JournalingSlot slot, IReadOnlyList<JournalingParameter> parameters, IDatabaseTransaction transaction,
+		string? failureHint = null )
+	{
+		IReadOnlyList<string> statements = _statements.Statements( slot );
+
+		for( int index = 0; index < statements.Count; index++ )
+			try
+			{
+				transaction.ExecuteJournalingStatement( statements[index], parameters );
+			}
+			catch( Exception exception )
+			{
+				string message = failureHint is null ? exception.Message : $"{exception.Message} {failureHint}";
+
+				throw new JournalingStatementException( slot.ToString(), index + 1, message, exception );
+			}
+	}
+
+	/// <summary>
+	/// Runs a query slot's single statement (query slots hold exactly one — enforced by
+	/// <see cref="JournalingStatements"/> — so a result set has somewhere unambiguous to come from)
+	/// and returns its reader; the caller disposes it, as it is here the caller.
+	/// </summary>
+	private IDataReader ExecuteQuery( JournalingSlot slot, IDatabaseTransaction transaction, string? release = null )
+	{
+		string statement = _statements.Statements( slot )[0];
+		IReadOnlyList<JournalingParameter> parameters = Parameters( slot, release: release );
+
+		try
+		{
+			return transaction.ExecuteJournalingQuery( statement, parameters );
+		}
+		catch( Exception exception )
+		{
+			throw new JournalingStatementException( slot.ToString(), 1, exception.Message, exception );
+		}
+	}
+
+	/// <summary>
+	/// The parameters a slot's statements are called with, in the order
+	/// <see cref="JournalingSlots.ParameterNames"/> lists for that slot — <c>@project</c> is always
+	/// bound, the rest only when the slot's contract names them, so a caller never supplies a
+	/// parameter the slot does not list.
+	/// </summary>
+	private JournalingParameter[] Parameters(
+		JournalingSlot slot, string? release = null, string? plan = null, string? step = null,
+		string? description = null )
+	{
+		IReadOnlyList<string> names = JournalingSlots.ParameterNames( slot );
+		JournalingParameter[] parameters = new JournalingParameter[names.Count];
+
+		for( int index = 0; index < names.Count; index++ )
+			parameters[index] = new JournalingParameter(
+				names[index], Value( names[index], release, plan, step, description ) );
+
+		return parameters;
+	}
+
+	private string Value( string name, string? release, string? plan, string? step, string? description )
+		=> name switch
+		{
+			JournalingSlots.Parameters.Project => _project,
+			JournalingSlots.Parameters.Release => release!,
+			JournalingSlots.Parameters.Plan => plan!,
+			JournalingSlots.Parameters.Step => step!,
+			JournalingSlots.Parameters.Description => description!,
+			_ => throw new ArgumentOutOfRangeException( nameof(name), name, "Unknown journaling parameter." )
+		};
+
+	/// <summary>
+	/// Coerces column 1 (completed) explicitly rather than with <see cref="Convert.ToBoolean(object)"/>,
+	/// which throws on 'Y' — exactly what an Oracle or DB2 maintainer stores in a <c>CHAR(1)</c>. NULL
+	/// throws: there is no valid completed state for a NULL. A <see cref="bool"/> passes through; any
+	/// numeric type is compared to zero; a string or char matches "1", "y", "yes", "t", "true" as true
+	/// and "0", "n", "no", "f", "false" as false, case-insensitively; anything else throws.
+	/// </summary>
+	private static bool Completed( string slot, object value )
+		=> value switch
+		{
+			DBNull => throw new JournalingStatementException(
+				slot, 1, "column 1 (completed) is NULL; there is no valid coercion for NULL." ),
+
+			bool boolean => boolean,
+
+			byte or sbyte or short or ushort or int or uint or long or ulong or float or double or decimal =>
+				Convert.ToDouble( value ) != 0,
+
+			char c => CompletedText( slot, c.ToString() ),
+
+			string text => CompletedText( slot, text ),
+
+			_ => throw new JournalingStatementException(
+				slot, 1, $"column 1 (completed) has an unsupported type '{value.GetType()}'." )
+		};
+
+	private static bool CompletedText( string slot, string text )
+		=> text.Trim().ToLowerInvariant() switch
+		{
+			"1" or "y" or "yes" or "t" or "true" => true,
+			"0" or "n" or "no" or "f" or "false" => false,
+			_ => throw new JournalingStatementException(
+				slot, 1, $"column 1 (completed) has an unrecognized value '{text}'." )
+		};
+}

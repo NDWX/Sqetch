@@ -12,10 +12,14 @@ public enum BundleSelection
 /// <summary>
 /// Assembled bundle content. All lists are in deployment-chronological order; that order is
 /// part of the bundle contract.
+/// <paramref name="Journaling"/> is the project's journaling SQL, carried with the bundle so a
+/// deployment journals through the maintainer's own statements rather than a driver-specific
+/// writer. Its type cannot be constructed incomplete, so a bundle always has all fifteen slots.
 /// </summary>
 public sealed record Bundle(
 	ProjectDefinition Project,
 	BundleSelection Selection,
+	JournalingStatements Journaling,
 	IReadOnlyList<BundleRelease> Releases,
 	IReadOnlyList<BundlePlan> Plans );
 

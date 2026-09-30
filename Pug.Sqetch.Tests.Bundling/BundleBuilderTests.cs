@@ -144,6 +144,33 @@ public class BundleBuilderTests
 		Assert.Equal( ["verify"], missing.Scripts );
 	}
 
+	/// <summary>
+	/// A bundle journals through the project's own SQL, so one assembled without it could never be
+	/// deployed. Refused at assembly, where the maintainer can still fix it, rather than at deploy
+	/// time, where the operator cannot.
+	/// </summary>
+	[Fact]
+	public void AssembleNamesEveryJournalingStatementTheProjectHasNotSet()
+	{
+		using TempProject temp = TempProject.Create();
+		using FileSystemProjectStores stores = temp.Open();
+		using IProject project = CreateProject( stores );
+
+		PopulateProject( temp, project );
+
+		// unset two of the fifteen by writing blanks the store reads back as unset
+		project.SetJournalingStatement( JournalingSlot.PrepareJournal, "-- kept" );
+
+		File.Delete( Path.Combine( temp.Root, "journaling", "OnPlanDeployed.sql" ) );
+		File.Delete( Path.Combine( temp.Root, "journaling", "GetLatestRelease.sql" ) );
+
+		MissingJournalingStatementsException missing = Assert.Throws<MissingJournalingStatementsException>(
+			() => Builder( stores, project ).Assemble( BundleSelection.Finalized ) );
+
+		Assert.Equal(
+			[JournalingSlot.PlanDeployed, JournalingSlot.GetLatestRelease], missing.Slots );
+	}
+
 	private static IProject CreateProject( FileSystemProjectStores stores )
 		=> ProjectFactory.Create(
 			stores.InfoStore, stores.ScriptsStore,
@@ -168,6 +195,8 @@ public class BundleBuilderTests
 		SeedScripts( temp, project.Add( new StepDefinition( "cleanup", "drop", "", [] ), "cleanup" ), "drop" );
 		SeedScripts( temp, project.Add( new StepDefinition( "pending", "later", "", [] ), "pending" ), "later" );
 
+		SeedJournaling( project );
+
 		project.CreateRelease( new ReleaseDefinition( "2026.07", "July", "" ), ["table", "index"] );
 		project.FinalizeRelease( "2026.07" );
 		project.CreateRelease( new ReleaseDefinition( "2026.08", "August", "2026.07" ), ["cleanup"] );
@@ -182,10 +211,22 @@ public class BundleBuilderTests
 		SeedScripts( temp, project.Add( new StepDefinition( "table", "create", "", [] ), "table" ), "create" );
 		SeedScripts( temp, project.Add( new StepDefinition( "cleanup", "drop", "", [] ), "cleanup" ), "drop" );
 
+		SeedJournaling( project );
+
 		project.CreateRelease( new ReleaseDefinition( "2026.07", "July", "" ), ["table"] );
 		project.FinalizeRelease( "2026.07" );
 		project.CreateRelease( new ReleaseDefinition( "2026.08", "August", "2026.07" ), ["cleanup"] );
 		project.FinalizeRelease( "2026.08" );
+	}
+
+	/// <summary>
+	/// Every journaling slot, so <see cref="BundleBuilder.Assemble"/>'s completeness check passes.
+	/// Bundling a project that has not set them is covered separately.
+	/// </summary>
+	private static void SeedJournaling( IProject project )
+	{
+		foreach( JournalingSlot slot in JournalingSlots.All )
+			project.SetJournalingStatement( slot, $"-- {slot}" );
 	}
 
 	private static void SeedScripts( TempProject temp, StepScriptKeys keys, string step )

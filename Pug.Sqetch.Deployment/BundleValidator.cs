@@ -6,14 +6,18 @@ namespace Pug.Sqetch.Deployment;
 public static class BundleValidator
 {
 	/// <summary>
-	/// Reads the bundle's manifest and confirms every step listed in it has all three
-	/// scripts in the bundle; throws <see cref="InvalidBundleException"/> naming every
-	/// missing entry, or <see cref="InvalidBundleManifestException"/> for a missing or
-	/// invalid manifest.
+	/// Reads the bundle's manifest and the project's journaling SQL, and confirms every step listed
+	/// in the manifest has all three scripts in the bundle; throws
+	/// <see cref="InvalidBundleException"/> naming every missing entry,
+	/// <see cref="InvalidBundleManifestException"/> for a missing or invalid manifest, or
+	/// <see cref="BundlingException"/> when the journaling statements are missing or invalid.
+	/// Journaling is read here, before any driver exists, so a bundle that could never be journaled
+	/// is refused without touching the database.
 	/// </summary>
-	public static BundleManifest Validate( IBundleReader reader, IBundleLayout layout )
+	public static ValidatedBundle Validate( IBundleReader reader, IBundleLayout layout )
 	{
 		BundleManifest manifest = layout.ReadManifest( reader );
+		JournalingStatements journaling = layout.ReadJournalingStatements( reader );
 
 		List<string> missing = new ();
 
@@ -31,6 +35,6 @@ public static class BundleValidator
 			throw new InvalidBundleException(
 				$"Bundle is missing entries listed in its manifest: {string.Join( ", ", missing )}." );
 
-		return manifest;
+		return new ValidatedBundle( manifest, journaling );
 	}
 }

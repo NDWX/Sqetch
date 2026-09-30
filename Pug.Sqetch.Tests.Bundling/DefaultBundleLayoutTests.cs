@@ -14,6 +14,7 @@ public class DefaultBundleLayoutTests
 		Bundle bundle = new (
 			new ProjectDefinition( "demo", "Demo project", "postgres" ),
 			BundleSelection.Finalized,
+			Journaling(),
 			[new BundleRelease( "2026.07", "July release", "", true )],
 			[
 				new BundlePlan(
@@ -31,6 +32,21 @@ public class DefaultBundleLayoutTests
 		Assert.Equal(
 			[
 				"manifest.json",
+				"journaling/OnDeployingRelease.sql",
+				"journaling/OnDeployingPlan.sql",
+				"journaling/OnDeployingStep.sql",
+				"journaling/OnStepDeployed.sql",
+				"journaling/OnPlanDeployed.sql",
+				"journaling/OnReleaseDeployed.sql",
+				"journaling/OnRollingBackRelease.sql",
+				"journaling/OnRollingBackPlan.sql",
+				"journaling/OnRollingBackStep.sql",
+				"journaling/OnRolledBackStep.sql",
+				"journaling/OnRolledBackPlan.sql",
+				"journaling/OnRolledBackRelease.sql",
+				"journaling/PrepareJournal.sql",
+				"journaling/GetLatestRelease.sql",
+				"journaling/GetDeployedPlans.sql",
 				"plans/table/steps/create/deploy.sql",
 				"plans/table/steps/create/verify.sql",
 				"plans/table/steps/create/rollback.sql",
@@ -40,7 +56,8 @@ public class DefaultBundleLayoutTests
 			],
 			writer.Entries.Select( x => x.Path ).ToArray() );
 
-		Assert.Equal( "-- deploy", writer.Entries[1].Content );
+		// entry 0 is the manifest and 1..15 the journaling slots, so the first script is 16
+		Assert.Equal( "-- deploy", writer.Entries[16].Content );
 
 		// each step's scripts are disposed right after they are written
 		Assert.True( deploy.Disposed );
@@ -72,6 +89,7 @@ public class DefaultBundleLayoutTests
 		Bundle bundle = new (
 			new ProjectDefinition( "demo", "", "postgres" ),
 			BundleSelection.Test,
+			Journaling(),
 			[],
 			[
 				new BundlePlan(
@@ -85,7 +103,7 @@ public class DefaultBundleLayoutTests
 
 		Assert.Equal(
 			["manifest.json", "plans/partial/steps/only-deploy/deploy.sql"],
-			writer.Entries.Select( x => x.Path ).ToArray() );
+			writer.Entries.Select( x => x.Path ).Where( x => !x.StartsWith( "journaling/" ) ).ToArray() );
 
 		using JsonDocument manifest = JsonDocument.Parse( writer.Entries[0].Content );
 
@@ -101,6 +119,7 @@ public class DefaultBundleLayoutTests
 		Bundle bundle = new (
 			new ProjectDefinition( "demo", "Demo project", "postgres" ),
 			BundleSelection.Test,
+			Journaling(),
 			[new BundleRelease( "2026.07", "July release", "2026.06", true )],
 			[
 				new BundlePlan(
@@ -126,6 +145,56 @@ public class DefaultBundleLayoutTests
 		Assert.Equal( ["table"], manifest.Plans[1].Dependencies );
 		Assert.Equal( ["create"], manifest.Plans[1].Steps[0].Dependencies );
 	}
+
+	/// <summary>
+	/// Journaling entries sit between the manifest and the plan payload: a deployment needs them
+	/// before it may run any script, and the layout's doc comment states that order as a contract.
+	/// </summary>
+	[Fact]
+	public void JournalingStatementsAreWrittenAndReadBackThroughTheLayout()
+	{
+		Bundle bundle = new (
+			new ProjectDefinition( "demo", "", "postgres" ),
+			BundleSelection.Test,
+			Journaling(),
+			[],
+			[
+				new BundlePlan(
+					"p", "", "", [],
+					[new BundleStep( "s", "", [], () => new StepScripts( Script( "-- d" ), null, null ) )] )
+			] );
+
+		RecordingWriter writer = new ();
+		DefaultBundleLayout layout = new ();
+
+		layout.Write( bundle, writer );
+
+		List<string> paths = writer.Entries.Select( x => x.Path ).ToList();
+
+		Assert.Equal( 15, paths.Count( x => x.StartsWith( "journaling/" ) ) );
+		Assert.Equal( 0, paths.IndexOf( "manifest.json" ) );
+		Assert.True(
+			paths.FindLastIndex( x => x.StartsWith( "journaling/" ) )
+			< paths.FindIndex( x => x.StartsWith( "plans/" ) ) );
+
+		JournalingStatements read = layout.ReadJournalingStatements( new FakeReader( writer ) );
+
+		Assert.Equal( "-- PrepareJournal", read.Text( JournalingSlot.PrepareJournal ) );
+		Assert.Equal( ["-- GetDeployedPlans"], read.Statements( JournalingSlot.GetDeployedPlans ) );
+	}
+
+	[Fact]
+	public void AMissingJournalingSlotIsRefusedByName()
+	{
+		BundlingException error = Assert.Throws<BundlingException>(
+			() => new DefaultBundleLayout().ReadJournalingStatements( new FakeReader() ) );
+
+		Assert.Contains( "journaling/OnDeployingRelease.sql", error.Message );
+		Assert.Contains( "journaling/GetDeployedPlans.sql", error.Message );
+	}
+
+	private static JournalingStatements Journaling()
+		=> new ( JournalingSlots.All.ToDictionary( slot => slot, slot => (string?)$"-- {slot}" ) );
 
 	[Fact]
 	public void MissingManifestIsRefused()

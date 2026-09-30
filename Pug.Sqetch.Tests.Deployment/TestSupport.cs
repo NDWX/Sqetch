@@ -11,7 +11,7 @@ namespace Pug.Sqetch.Tests.Deployment;
 /// one it is asserting:
 /// <list type="bullet">
 /// <item><description>the <em>result</em> of a deployment — the journal state a later run would
-/// read back (<see cref="FakeJournalWriter"/>) and the step scripts the database actually kept
+/// read back (<see cref="FakeJournal"/>) and the step scripts the database actually kept
 /// (<see cref="FakeDatabaseDriver.AppliedScripts"/>). Both become visible only when the
 /// transaction that produced them commits, as a real database's would.</description></item>
 /// <item><description>how it got there — <see cref="FakeDatabaseDriver.Events"/> for the exact
@@ -38,7 +38,26 @@ public sealed class FakeDatabaseDriver : IDatabaseDriver
 	/// <summary>Scripts whose execution should fail.</summary>
 	public HashSet<string> FailingScripts { get; } = [];
 
+	/// <summary>Journaling statements whose execution should fail, by exact statement text.</summary>
+	public HashSet<string> FailingJournalingStatements { get; } = [];
+
+	/// <summary>Journaling queries whose execution should fail, by exact query text.</summary>
+	public HashSet<string> FailingJournalingQueries { get; } = [];
+
 	public List<FakeTransaction> Transactions { get; } = [];
+
+	/// <summary>
+	/// Canned result sets for <see cref="FakeTransaction.ExecuteJournalingQuery"/>, keyed by the exact
+	/// query text. A test seeds one per query slot's SQL before exercising <c>StatementJournal</c>.
+	/// </summary>
+	public Dictionary<string, DataTable> QueryResults { get; } = new ();
+
+	/// <summary>
+	/// Interprets the marker journaling statements a deployment runs, so the durable journal state
+	/// can be asserted. Attached by <see cref="FakeJournal.Attach"/>; null when a test drives
+	/// journaling statements directly and does not care about their meaning.
+	/// </summary>
+	public FakeJournal? Journal { get; set; }
 
 	public IDatabaseTransaction BeginTransaction()
 	{
@@ -49,15 +68,14 @@ public sealed class FakeDatabaseDriver : IDatabaseDriver
 
 		return transaction;
 	}
-
-	public void ExecuteJournalingStatement( string statement ) => Events.Add( $"journal-statement {statement}" );
-
-	public IDataReader ExecuteJournalingQuery( string query ) => throw new NotSupportedException();
 }
 
 public sealed class FakeTransaction( FakeDatabaseDriver driver, int number ) : IDatabaseTransaction
 {
 	private readonly List<Action> _onCommit = [];
+
+	/// <summary>The driver this transaction was begun on — a test seeds canned query results here.</summary>
+	public FakeDatabaseDriver Driver { get; } = driver;
 
 	public int Number { get; } = number;
 
@@ -71,6 +89,19 @@ public sealed class FakeTransaction( FakeDatabaseDriver driver, int number ) : I
 	/// </summary>
 	public List<string> Journaled { get; } = [];
 
+	/// <summary>
+	/// Every journaling statement and query this transaction executed, paired with the parameters it
+	/// was called with — so a test can assert exact <c>(statement, parameters)</c> pairs without
+	/// parsing <see cref="FakeDatabaseDriver.Events"/> strings.
+	/// </summary>
+	public List<(string Statement, IReadOnlyList<JournalingParameter> Parameters)> JournalingCalls { get; } = [];
+
+	/// <summary>
+	/// Every reader <see cref="ExecuteJournalingQuery"/> handed out, in order — so a test can assert
+	/// the caller disposed it.
+	/// </summary>
+	public List<IDataReader> QueryReaders { get; } = [];
+
 	/// <summary>Registers state this transaction makes durable when, and only when, it commits.</summary>
 	public void OnCommit( Action apply ) => _onCommit.Add( apply );
 
@@ -83,9 +114,37 @@ public sealed class FakeTransaction( FakeDatabaseDriver driver, int number ) : I
 		OnCommit( () => driver.AppliedScripts.Add( script ) );
 	}
 
-	public void ExecuteJournalingStatement( string statement ) => driver.Events.Add( $"journal-statement #{Number} {statement}" );
+	public void ExecuteJournalingStatement( string statement, IReadOnlyList<JournalingParameter> parameters )
+	{
+		JournalingCalls.Add( (statement, parameters) );
+		driver.Events.Add( $"journal-statement #{Number} {statement} [{Format( parameters )}]" );
 
-	public IDataReader ExecuteJournalingQuery( string query ) => throw new NotSupportedException();
+		if( driver.FailingJournalingStatements.Contains( statement ) )
+			throw new InvalidOperationException( $"journaling statement rejected: {statement}" );
+
+		driver.Journal?.Observe( statement, parameters, this );
+	}
+
+	public IDataReader ExecuteJournalingQuery( string query, IReadOnlyList<JournalingParameter> parameters )
+	{
+		JournalingCalls.Add( (query, parameters) );
+		driver.Events.Add( $"journal-query #{Number} {query} [{Format( parameters )}]" );
+
+		if( driver.FailingJournalingQueries.Contains( query ) )
+			throw new InvalidOperationException( $"journaling query rejected: {query}" );
+
+		if( !driver.QueryResults.TryGetValue( query, out DataTable? table ) )
+			throw new InvalidOperationException( $"no canned result seeded for query: {query}" );
+
+		IDataReader reader = table.CreateDataReader();
+
+		QueryReaders.Add( reader );
+
+		return reader;
+	}
+
+	private static string Format( IReadOnlyList<JournalingParameter> parameters )
+		=> string.Join( ", ", parameters.Select( p => $"{p.Name}={p.Value}" ) );
 
 	public void Rollback()
 	{
@@ -107,94 +166,6 @@ public sealed class FakeTransaction( FakeDatabaseDriver driver, int number ) : I
 		_onCommit.Clear();
 
 		driver.Events.Add( $"commit #{Number}" );
-	}
-}
-
-/// <summary>
-/// A journal whose state is the deployment's result: seed it to describe an earlier run, and read
-/// it back afterwards to assert what this run recorded. Writes land only when their transaction
-/// commits, so a rolled-back release leaves no trace.
-/// </summary>
-public sealed class FakeJournalWriter( FakeDatabaseDriver driver ) : IChangeJournalWriter
-{
-	public JournaledRelease? Latest { get; set; }
-
-	/// <summary>
-	/// Per release, the plans of it the journal holds. Order is deliberately not significant:
-	/// the engine treats them as a set, so tests may seed them in any order to prove that.
-	/// </summary>
-	public Dictionary<string, List<string>> DeployedPlans { get; } = [];
-
-	/// <summary>
-	/// Releases whose <em>start</em> this journal recorded, in order. A release deployment
-	/// resumes into is absent: the run that began it recorded that already.
-	/// </summary>
-	public List<string> StartedReleases { get; } = [];
-
-	public void DeployingRelease( DeploymentUnit unit, IDatabaseTransaction transaction )
-		=> Record(
-			transaction, "deploying-release", unit.Name,
-			() =>
-			{
-				StartedReleases.Add( unit.Name );
-				Latest = new JournaledRelease( unit.Name, Completed: false );
-			} );
-
-	public void DeployingPlan( Plan unit, IDatabaseTransaction transaction )
-		=> Record( transaction, "deploying-plan", $"{unit.Release}/{unit.Name}" );
-
-	public void DeployingStep( Step unit, IDatabaseTransaction transaction )
-		=> Record( transaction, "deploying-step", $"{unit.Release}/{unit.Plan}/{unit.Name}" );
-
-	public void StepDeployed( string release, string plan, string name, IDatabaseTransaction transaction )
-		=> Record( transaction, "step-deployed", $"{release}/{plan}/{name}" );
-
-	public void PlanDeployed( string release, string name, IDatabaseTransaction transaction )
-		=> Record( transaction, "plan-deployed", $"{release}/{name}", () => Plans( release ).Add( name ) );
-
-	public void ReleaseDeployed( string name, IDatabaseTransaction transaction )
-		=> Record(
-			transaction, "release-deployed", name,
-			() => Latest = new JournaledRelease( name, Completed: true ) );
-
-	public void RollingBackRelease( string name, IDatabaseTransaction transaction ) => throw new NotSupportedException();
-
-	public void RollingBackPlan( string release, string planname, IDatabaseTransaction transaction ) => throw new NotSupportedException();
-
-	public void RollingBackStep( string release, string plan, string name, IDatabaseTransaction transaction ) => throw new NotSupportedException();
-
-	public void RolledBackStep( string release, string plan, string name, IDatabaseTransaction transaction ) => throw new NotSupportedException();
-
-	public void RolledBackPlan( string release, string name, IDatabaseTransaction transaction ) => throw new NotSupportedException();
-
-	public void RolledBackRelease( string name, IDatabaseTransaction transaction ) => throw new NotSupportedException();
-
-	/// <summary>Resets the journal to a fresh database, for a test that deploys more than once.</summary>
-	public void Forget()
-	{
-		Latest = null;
-
-		DeployedPlans.Clear();
-		StartedReleases.Clear();
-	}
-
-	public JournaledRelease? GetLatestRelease( IDatabaseDriver _ ) => Latest;
-
-	public IEnumerable<string> GetDeployedPlans( string release, IDatabaseDriver _ )
-		=> DeployedPlans.TryGetValue( release, out List<string>? plans ) ? plans : [];
-
-	private List<string> Plans( string release )
-		=> DeployedPlans.TryGetValue( release, out List<string>? plans ) ? plans : DeployedPlans[release] = [];
-
-	private void Record( IDatabaseTransaction transaction, string verb, string target, Action? durable = null )
-	{
-		FakeTransaction fake = (FakeTransaction)transaction;
-
-		driver.Events.Add( $"{verb} #{fake.Number} {target}" );
-		fake.Journaled.Add( $"{verb} {target}" );
-
-		if( durable is not null )
-			fake.OnCommit( durable );
 	}
 }
 
@@ -257,6 +228,120 @@ public sealed class InMemoryBundleReader : IBundleReader
 	}
 }
 
+/// <summary>
+/// Stands in for a journal now that there is no journal-writer abstraction to fake. A deployment
+/// journals by running the project's SQL, so a test bundles marker statements —
+/// "journal &lt;slot&gt;" — and this interprets them: the statement text names the slot and the bound
+/// parameters carry the release, plan and step.
+///
+/// <see cref="Latest"/> and <see cref="DeployedPlans"/> are the seed, answering the two query slots
+/// as an earlier run would have left them; they then accumulate what this run journaled, applied on
+/// commit so a rolled-back transaction leaves no trace. Assert them to assert the result.
+/// </summary>
+public sealed class FakeJournal
+{
+	private const string Prefix = "journal ";
+
+	public JournaledRelease? Latest { get; set; }
+
+	public Dictionary<string, List<string>> DeployedPlans { get; } = [];
+
+	/// <summary>
+	/// Releases whose <em>start</em> was journaled, in order. A release deployment resumes into is
+	/// absent: the run that began it recorded that already.
+	/// </summary>
+	public List<string> StartedReleases { get; } = [];
+
+	public static string Marker( JournalingSlot slot ) => $"{Prefix}{slot}";
+
+	/// <summary>Marker SQL for every slot — what a test bundles.</summary>
+	public static JournalingStatements Statements()
+		=> new ( JournalingSlots.All.ToDictionary( slot => slot, slot => (string?)Marker( slot ) ) );
+
+	/// <summary>
+	/// Answers the two query slots from the seeded state and starts interpreting the statements the
+	/// deployment runs. Call once, before deploying.
+	/// </summary>
+	public void Attach( FakeDatabaseDriver driver )
+	{
+		driver.Journal = this;
+
+		DataTable latest = new ();
+
+		latest.Columns.Add( "release", typeof(string) );
+		latest.Columns.Add( "completed", typeof(bool) );
+
+		if( Latest is not null )
+			latest.Rows.Add( Latest.Name, Latest.Completed );
+
+		driver.QueryResults[Marker( JournalingSlot.GetLatestRelease )] = latest;
+
+		DataTable plans = new ();
+
+		plans.Columns.Add( "plan", typeof(string) );
+
+		// only a release that is incompletely deployed is ever asked about, so the seeded plans of
+		// the latest release are the only ones the engine can request
+		if( Latest is not null && DeployedPlans.TryGetValue( Latest.Name, out List<string>? held ) )
+			foreach( string plan in held )
+				plans.Rows.Add( plan );
+
+		driver.QueryResults[Marker( JournalingSlot.GetDeployedPlans )] = plans;
+	}
+
+	internal void Observe(
+		string statement, IReadOnlyList<JournalingParameter> parameters, FakeTransaction transaction )
+	{
+		if( !statement.StartsWith( Prefix, StringComparison.Ordinal ) )
+			return;
+
+		string Value( string name )
+			=> parameters.SingleOrDefault( parameter => parameter.Name == name ).Value ?? "";
+
+		string release = Value( JournalingSlots.Parameters.Release );
+		string plan = Value( JournalingSlots.Parameters.Plan );
+		string step = Value( JournalingSlots.Parameters.Step );
+		string slot = statement[Prefix.Length..];
+
+		// the entry shows exactly the identity the slot carries, so a slot with no release — the
+		// journal's own schema — is not recorded as one with a blank release
+		IReadOnlyList<string> carries =
+			JournalingSlots.TryParse( slot, out JournalingSlot parsed ) ? JournalingSlots.ParameterNames( parsed ) : [];
+
+		transaction.Journaled.Add(
+			carries.Contains( JournalingSlots.Parameters.Step ) ? $"{slot} {release}/{plan}/{step}"
+			: carries.Contains( JournalingSlots.Parameters.Plan ) ? $"{slot} {release}/{plan}"
+			: carries.Contains( JournalingSlots.Parameters.Release ) ? $"{slot} {release}"
+			: slot );
+
+		switch( slot )
+		{
+			case nameof(JournalingSlot.DeployingRelease):
+				transaction.OnCommit(
+					() =>
+					{
+						StartedReleases.Add( release );
+						Latest = new JournaledRelease( release, Completed: false );
+					} );
+
+				break;
+
+			case nameof(JournalingSlot.ReleaseDeployed):
+				transaction.OnCommit( () => Latest = new JournaledRelease( release, Completed: true ) );
+
+				break;
+
+			case nameof(JournalingSlot.PlanDeployed):
+				transaction.OnCommit( () => Plans( release ).Add( plan ) );
+
+				break;
+		}
+	}
+
+	private List<string> Plans( string release )
+		=> DeployedPlans.TryGetValue( release, out List<string>? plans ) ? plans : DeployedPlans[release] = [];
+}
+
 public static class Manifests
 {
 	public static BundleManifestStep Step( string name ) => new ( name, "", [] );
@@ -272,6 +357,9 @@ public static class Manifests
 		=> new ( new BundleManifestProject( "demo", "", "postgres" ), BundleSelection.Finalized,
 				DateTime.Now, releases, plans );
 
+	/// <summary>Journaling SQL for every slot; see <see cref="FakeJournal.Statements"/>.</summary>
+	public static JournalingStatements Journaling() => FakeJournal.Statements();
+
 	/// <summary>A reader holding all three scripts for every step of the manifest.</summary>
 	public static InMemoryBundleReader ReaderFor( BundleManifest manifest, IBundleLayout layout )
 	{
@@ -283,6 +371,9 @@ public static class Manifests
 					reader.Add(
 						layout.ScriptPath( plan.Name, step.Name, kind ),
 						$"-- {kind.ToString().ToLowerInvariant()} {plan.Name}/{step.Name}" );
+
+		foreach( JournalingSlot slot in JournalingSlots.All )
+			reader.Add( $"journaling/{JournalingSlots.FileName( slot )}", FakeJournal.Marker( slot ) );
 
 		return reader;
 	}

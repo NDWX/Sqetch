@@ -24,6 +24,14 @@ public interface IProject
 	void RemovePlanFromRelease( string release, string plan, bool includeDependants = false );
 	
 	void DeleteRelease( string release );
-	
+
 	void FinalizeRelease( string release );
+
+	/// <summary>
+	/// Sets the project's journaling SQL for <paramref name="slot"/>; throws
+	/// <see cref="ArgumentException"/> when <paramref name="statement"/> does not parse into at
+	/// least one statement, or (for a query slot) parses into more than one. No finalized-release
+	/// guard: journaling SQL is project-level, not tied to any one release.
+	/// </summary>
+	void SetJournalingStatement( JournalingSlot slot, string statement );
 }

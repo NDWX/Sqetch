@@ -19,10 +19,6 @@ public class DeploymentSettings : CommandSettings
 	[Description( "Bundle type: zip, tar, tar.gz or directory; inferred from the bundle path when omitted" )]
 	public string? BundleType { get; init; }
 
-	[CommandOption( "--journal <NAME>" )]
-	[Description( "Change journal writer; the registered default when omitted" )]
-	public string? Journal { get; init; }
-
 	[CommandOption( "--timeout <SECONDS>" )]
 	[Description( "Step script timeout in seconds, 0 for no timeout; default 300" )]
 	public int TimeoutSeconds { get; init; } = 300;

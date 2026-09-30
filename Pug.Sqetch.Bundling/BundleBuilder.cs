@@ -2,7 +2,8 @@ namespace Pug.Sqetch.Bundling;
 
 /// <summary>
 /// Assembles the deployable content of a project into a <see cref="Bundle"/>, verifying
-/// that no included plan is missing a step script.
+/// that no included plan is missing a step script and that the project's journaling SQL is
+/// complete.
 /// </summary>
 public class BundleBuilder
 {
@@ -23,9 +24,10 @@ public class BundleBuilder
 	/// is given, only releases strictly after it in the chain are included — a continuation
 	/// bundle. Throws <see cref="EmptyBundleException"/> when no plans match
 	/// <paramref name="selection"/>, <see cref="UnknownReleaseException"/> when
-	/// <paramref name="since"/> does not name a release in the chain, and
+	/// <paramref name="since"/> does not name a release in the chain,
 	/// <see cref="MissingStepScriptsException"/> when an included plan is missing a step
-	/// script.
+	/// script, and <see cref="MissingJournalingStatementsException"/> when the project has not set
+	/// every journaling statement.
 	/// </summary>
 	public Bundle Assemble( BundleSelection selection, string? since = null )
 	{
@@ -47,9 +49,17 @@ public class BundleBuilder
 		foreach( BundlePlan plan in plans )
 			_project.VerifyStepScripts( plan.Name );
 
+		// the journal is deployed through the project's own SQL, so a bundle without it could
+		// never be deployed; refused here rather than at deploy time, where the operator has no
+		// way to fix it
+		_project.VerifyJournalingStatements();
+
 		return new Bundle(
 			_definition,
 			selection,
+			new JournalingStatements(
+				JournalingSlots.All.ToDictionary(
+					slot => slot, slot => _project.GetJournalingStatement( slot ) ) ),
 			releases.Select( x => new BundleRelease(
 				x.Definition.Name, x.Definition.Description, x.Definition.Dependency ?? "", x.Finalized is not null ) ).ToList(),
 			plans );

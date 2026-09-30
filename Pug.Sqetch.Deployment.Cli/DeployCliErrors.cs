@@ -12,12 +12,6 @@ internal static class DeployCliErrors
 				unknownDriver.Known.Count == 0
 					? $"unknown database driver '{unknownDriver.Name}'; no drivers are registered"
 					: $"unknown database driver '{unknownDriver.Name}'; known drivers: {string.Join( ", ", unknownDriver.Known )}",
-			UnknownChangeJournalWriterException { Name: null } noJournal =>
-				noJournal.Known.Any()
-					? $"no change journal writer specified and none is the default; use --journal with one of: {string.Join( ", ", noJournal.Known )}"
-					: "no change journal writer is registered",
-			UnknownChangeJournalWriterException unknownJournal =>
-				$"unknown change journal writer '{unknownJournal.Name}'; known writers: {string.Join( ", ", unknownJournal.Known )}",
 			DriverCreationException creation =>
 				$"failed to create database driver '{creation.Driver}': {creation.InnerException?.Message}",
 			StepScriptFailedException failed =>

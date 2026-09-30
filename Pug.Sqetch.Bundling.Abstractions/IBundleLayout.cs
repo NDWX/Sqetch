@@ -16,6 +16,15 @@ public interface IBundleLayout
 	/// </summary>
 	BundleManifest ReadManifest( IBundleReader reader );
 
+	/// <summary>
+	/// Reads the project's journaling SQL back out of a bundle; throws
+	/// <see cref="BundlingException"/> when any slot is missing or unreadable.
+	/// Where the statements live is this layout's business — a layout is free to keep them in
+	/// separate entries or inside its manifest — so consumers read them through here rather than
+	/// composing entry paths of their own.
+	/// </summary>
+	JournalingStatements ReadJournalingStatements( IBundleReader reader );
+
 	/// <summary>Entry path of a step's script within this layout.</summary>
 	string ScriptPath( string plan, string step, StepScriptKind kind );
 }

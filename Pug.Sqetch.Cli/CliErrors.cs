@@ -28,6 +28,10 @@ internal static class CliErrors
 			AbandonedPlanDependantsException =>
 				"other plans in the release depend on this plan (use --with-dependants to remove them too)",
 			IncompleteDefinitionException => "the definition is missing a name",
+			MissingJournalingStatementsException missingJournaling =>
+				"journaling statements are not set for: "
+				+ $"{string.Join( ", ", missingJournaling.Slots )}; run 'sqetch journaling set <SLOT> ...' for each "
+				+ "(rollback slots are required too, even though rollback deployment is not yet supported)",
 			EmptyBundleException => "no plans match the selection; nothing to bundle",
 			BundlingException bundling => bundling.Message,
 			ProjectStoreException store => store.Message,

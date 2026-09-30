@@ -1,0 +1,4 @@
+# SQL is content Sqetch parses: journaling slots are split on a line whose trimmed content is
+# exactly ';;'. Splitting is line-based and so already CRLF-tolerant, but normalizing checkouts to
+# LF keeps the files byte-identical across platforms and their diffs minimal.
+*.sql text eol=lf

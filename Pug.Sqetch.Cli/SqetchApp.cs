@@ -84,6 +84,20 @@ public static class SqetchApp
 					.WithDescription( "Finalize a release, freezing it and its plans" );
 		} );
 
+		config.AddBranch( "journaling", journaling =>
+		{
+			journaling.SetDescription( "Author and inspect the project's journaling SQL" );
+
+			journaling.AddCommand<JournalingListCommand>( "list" )
+					.WithDescription( "List every journaling slot and whether it is set" );
+
+			journaling.AddCommand<JournalingPrintCommand>( "print" )
+					.WithDescription( "Print one slot's SQL verbatim" );
+
+			journaling.AddCommand<JournalingSetCommand>( "set" )
+					.WithDescription( "Set one slot's SQL from an argument, --file or --stdin" );
+		} );
+
 		config.AddCommand<BundleCommand>( "bundle" )
 				.WithDescription( "Bundle plans and their steps into a deployment archive or directory" );
 	}

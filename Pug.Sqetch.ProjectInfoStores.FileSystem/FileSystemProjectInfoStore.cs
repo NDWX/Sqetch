@@ -365,6 +365,24 @@ public sealed class FileSystemProjectInfoStore : IProjectInfoStore
 		MovePlan( entry, entry.Release, string.Empty, null );
 	}
 
+	public string? GetJournalingStatement( JournalingSlot slot )
+	{
+		string path = _session.Paths.JournalingStatementFile( slot );
+
+		// File.ReadAllText detects and strips a BOM; no migration is wanted for projects
+		// created before this feature, so an unset slot is simply an absent file
+		return File.Exists( path ) ? File.ReadAllText( path ) : null;
+	}
+
+	/// <summary>
+	/// The file ends in exactly one newline, whatever the caller supplied: the files are committed to
+	/// version control, and normalizing here keeps a round trip stable — piping
+	/// 'journaling print' back into 'journaling set' would otherwise add a line every time.
+	/// </summary>
+	public void SetJournalingStatement( JournalingSlot slot, string statement )
+		=> AtomicFile.WriteAllText(
+			_session.Paths.JournalingStatementFile( slot ), statement.TrimEnd( '\r', '\n' ) + "\n" );
+
 	public void Dispose()
 	{
 		// all writes are flushed eagerly; nothing to release

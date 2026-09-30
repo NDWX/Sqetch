@@ -7,23 +7,27 @@ namespace Pug.Sqetch.Tests.Deployment;
 
 /// <summary>
 /// The result of a deployment is what it left behind: the journal state a later run reads back
-/// (<see cref="FakeJournalWriter.Latest"/>, <see cref="FakeJournalWriter.DeployedPlans"/>,
-/// <see cref="FakeJournalWriter.StartedReleases"/>) and the step scripts the database kept
+/// (<see cref="FakeJournal.Latest"/>, <see cref="FakeJournal.DeployedPlans"/>,
+/// <see cref="FakeJournal.StartedReleases"/>) and the step scripts the database kept
 /// (<see cref="FakeDatabaseDriver.AppliedScripts"/>). Tests assert that, so a change to how the
 /// engine narrates its progress cannot fail them.
 ///
+/// The engine journals by running the project's SQL, so these tests bundle marker statements and
+/// <see cref="FakeJournal"/> interprets them — there is no journal-writer abstraction to fake.
+/// Every deployment opens two transactions before any of its own: one for the journal's schema and
+/// one for the two journal queries. Deployment transactions therefore start at #3, and a run that
+/// finds nothing to deploy still opens those two.
+///
 /// Three things are asserted separately, each in its own section below, because they are separate
-/// contracts rather than incidental detail: what the transactions guarantee, what the journal
-/// writer sees interleaved, and what the host is told.
+/// contracts rather than incidental detail: what the transactions guarantee, what one transaction
+/// makes durable together, and what the host is told.
 /// </summary>
 public class DeploymentEngineTests
 {
 	private readonly DefaultBundleLayout _layout = new ();
 	private readonly FakeDatabaseDriver _driver = new ();
 	private readonly RecordingListener _listener = new ();
-	private readonly FakeJournalWriter _journal;
-
-	public DeploymentEngineTests() => _journal = new FakeJournalWriter( _driver );
+	private readonly FakeJournal _journal = new ();
 
 	// ---------------------------------------------------------------- what gets deployed
 
@@ -196,8 +200,12 @@ public class DeploymentEngineTests
 	}
 	*/
 
+	/// <summary>
+	/// The journal is prepared and read on every deployment, so an up-to-date database opens those
+	/// two transactions and no more — nothing is deployed and nothing else is touched.
+	/// </summary>
 	[Fact]
-	public void RedeployingAnUnchangedBundleChangesNothingAndOpensNoTransaction()
+	public void RedeployingAnUnchangedBundleChangesNothingBeyondPreparingAndReadingTheJournal()
 	{
 		BundleManifest manifest = Manifest( [Release( "r1" )], [Plan( "a", "r1", "s1" )] );
 
@@ -206,8 +214,7 @@ public class DeploymentEngineTests
 
 		Deploy( manifest, DeploymentCommitLevel.Release );
 
-		Assert.Empty( _driver.Transactions );
-		Assert.Empty( _driver.AppliedScripts );
+		AssertNothingWasDeployed( 2 );
 		Assert.Equal( new JournaledRelease( "r1", Completed: true ), _journal.Latest );
 	}
 
@@ -321,7 +328,7 @@ public class DeploymentEngineTests
 		Assert.Contains( "deployed plans of release 'r1'", error.Message );
 		Assert.Contains( "'scrapped', 'renamed'", error.Message );
 		Assert.Contains( "restore the database", error.Message );
-		AssertNothingHappened();
+		AssertNothingWasDeployed( 2 );
 	}
 
 	/// <summary>
@@ -339,7 +346,7 @@ public class DeploymentEngineTests
 			() => Deploy( manifest, DeploymentCommitLevel.Release ) );
 
 		Assert.Contains( "pseudo", error.Message );
-		AssertNothingHappened();
+		AssertNothingWasDeployed( 2 );
 	}
 
 	[Fact]
@@ -355,7 +362,7 @@ public class DeploymentEngineTests
 		Assert.Contains( "release 'r1' is only partially deployed", error.Message );
 		Assert.Contains( "release 'r2'", error.Message );
 		Assert.Equal( new JournaledRelease( "r1", Completed: false ), error.Journaled );
-		AssertNothingHappened();
+		AssertNothingWasDeployed( 2 );
 	}
 
 	[Fact]
@@ -369,7 +376,7 @@ public class DeploymentEngineTests
 		Assert.Contains( "continues from release 'r1'", error.Message );
 		Assert.Contains( "no deployed releases", error.Message );
 		Assert.Null( error.Journaled );
-		AssertNothingHappened();
+		AssertNothingWasDeployed( 2 );
 	}
 
 	[Fact]
@@ -386,7 +393,7 @@ public class DeploymentEngineTests
 			"database is at release 'r9', which this bundle neither contains nor continues from.",
 			error.Message );
 		Assert.Equal( "r9", error.Journaled!.Name );
-		AssertNothingHappened();
+		AssertNothingWasDeployed( 2 );
 	}
 
 	[Fact]
@@ -402,7 +409,7 @@ public class DeploymentEngineTests
 		Assert.Equal(
 			"Release 'r2' does not depend on 'r0', the release preceding it in the bundle.",
 			error.Message );
-		AssertNothingHappened();
+		AssertNothingWasDeployed( 0 );
 	}
 
 	[Fact]
@@ -414,7 +421,7 @@ public class DeploymentEngineTests
 			() => Deploy( manifest, DeploymentCommitLevel.Release ) );
 
 		Assert.Contains( "'r9'", error.Message );
-		AssertNothingHappened();
+		AssertNothingWasDeployed( 0 );
 	}
 
 	// ------------------------------------------------- what the transactions guarantee
@@ -428,14 +435,15 @@ public class DeploymentEngineTests
 
 		Deploy( manifest, DeploymentCommitLevel.Release );
 
-		Assert.Equal( 2, _driver.Transactions.Count );
+		// the journal's schema and its two queries, then one transaction per release
+		Assert.Equal( 4, _driver.Transactions.Count );
 		Assert.All( _driver.Transactions, transaction => Assert.True( transaction.Committed ) );
 
 		// each release's whole deployment, completion included, is one transaction
-		Assert.Contains( "release-deployed r1", _driver.Transactions[0].Journaled );
-		Assert.Contains( "plan-deployed r1/alpha", _driver.Transactions[0].Journaled );
-		Assert.Contains( "release-deployed r2", _driver.Transactions[1].Journaled );
-		Assert.Contains( "plan-deployed r2/beta", _driver.Transactions[1].Journaled );
+		Assert.Contains( "ReleaseDeployed r1", _driver.Transactions[2].Journaled );
+		Assert.Contains( "PlanDeployed r1/alpha", _driver.Transactions[2].Journaled );
+		Assert.Contains( "ReleaseDeployed r2", _driver.Transactions[3].Journaled );
+		Assert.Contains( "PlanDeployed r2/beta", _driver.Transactions[3].Journaled );
 	}
 
 	/// <summary>
@@ -452,14 +460,15 @@ public class DeploymentEngineTests
 
 		Deploy( manifest, DeploymentCommitLevel.Plan );
 
-		Assert.Equal( 2, _driver.Transactions.Count );
+		// the journal's schema and its two queries, then one transaction per plan
+		Assert.Equal( 4, _driver.Transactions.Count );
 		Assert.All( _driver.Transactions, transaction => Assert.True( transaction.Committed ) );
 
-		Assert.Contains( "plan-deployed r1/alpha", _driver.Transactions[0].Journaled );
-		Assert.DoesNotContain( "release-deployed r1", _driver.Transactions[0].Journaled );
+		Assert.Contains( "PlanDeployed r1/alpha", _driver.Transactions[2].Journaled );
+		Assert.DoesNotContain( "ReleaseDeployed r1", _driver.Transactions[2].Journaled );
 
-		Assert.Contains( "plan-deployed r1/beta", _driver.Transactions[1].Journaled );
-		Assert.Contains( "release-deployed r1", _driver.Transactions[1].Journaled );
+		Assert.Contains( "PlanDeployed r1/beta", _driver.Transactions[3].Journaled );
+		Assert.Contains( "ReleaseDeployed r1", _driver.Transactions[3].Journaled );
 	}
 
 	[Fact]
@@ -476,19 +485,21 @@ public class DeploymentEngineTests
 
 		Assert.Equal( ( "r2", "b", "s1" ), (error.Release, error.Plan, error.Step) );
 
-		Assert.True( _driver.Transactions[0].Committed );
-		Assert.True( _driver.Transactions[1].RolledBack );
-		Assert.False( _driver.Transactions[1].Committed );
-		Assert.Equal( "rollback #2", _driver.Events.Last() );
+		Assert.True( _driver.Transactions[2].Committed );
+		Assert.True( _driver.Transactions[3].RolledBack );
+		Assert.False( _driver.Transactions[3].Committed );
+		Assert.Equal( "rollback #4", _driver.Events.Last() );
 	}
 
 	/// <summary>
-	/// The one test that pins the exact interleaving, because a journal writer's statements have
-	/// to be able to sit between a step's start and its completion: everything else asserts what
-	/// the deployment left behind instead.
+	/// The one test that pins the exact sequence, because three things have to be true together and
+	/// nothing else asserts them: the journal's schema is committed alone before the journal is read,
+	/// both queries share one transaction of their own, and a slot's statement can sit between a
+	/// step's start and its completion. Everything else asserts what the deployment left behind.
+	/// Parameters are spelled out here once; <c>StatementJournalTests</c> covers them per slot.
 	/// </summary>
 	[Fact]
-	public void JournalEntriesAndScriptsInterleaveWithinTheReleaseTransaction()
+	public void TheJournalIsPreparedThenReadThenInterleavedWithTheScripts()
 	{
 		BundleManifest manifest = Manifest(
 			[Release( "r1" )],
@@ -499,24 +510,72 @@ public class DeploymentEngineTests
 		Assert.Equal(
 			[
 				"begin #1",
-				"deploying-release #1 r1",
-				"deploying-plan #1 r1/alpha",
-				"deploying-step #1 r1/alpha/s1",
-				"script #1 -- deploy alpha/s1",
-				"step-deployed #1 r1/alpha/s1",
-				"deploying-step #1 r1/alpha/s2",
-				"script #1 -- deploy alpha/s2",
-				"step-deployed #1 r1/alpha/s2",
-				"plan-deployed #1 r1/alpha",
-				"deploying-plan #1 r1/beta",
-				"deploying-step #1 r1/beta/s1",
-				"script #1 -- deploy beta/s1",
-				"step-deployed #1 r1/beta/s1",
-				"plan-deployed #1 r1/beta",
-				"release-deployed #1 r1",
-				"commit #1"
+				"journal-statement #1 journal PrepareJournal [project=demo]",
+				"commit #1",
+				"begin #2",
+				"journal-query #2 journal GetLatestRelease [project=demo]",
+				"commit #2",
+				"begin #3",
+				"journal-statement #3 journal DeployingRelease [project=demo, release=r1, description=]",
+				"journal-statement #3 journal DeployingPlan [project=demo, release=r1, plan=alpha, description=]",
+				"journal-statement #3 journal DeployingStep [project=demo, release=r1, plan=alpha, step=s1, description=]",
+				"script #3 -- deploy alpha/s1",
+				"journal-statement #3 journal StepDeployed [project=demo, release=r1, plan=alpha, step=s1, description=]",
+				"journal-statement #3 journal DeployingStep [project=demo, release=r1, plan=alpha, step=s2, description=]",
+				"script #3 -- deploy alpha/s2",
+				"journal-statement #3 journal StepDeployed [project=demo, release=r1, plan=alpha, step=s2, description=]",
+				"journal-statement #3 journal PlanDeployed [project=demo, release=r1, plan=alpha, description=]",
+				"journal-statement #3 journal DeployingPlan [project=demo, release=r1, plan=beta, description=]",
+				"journal-statement #3 journal DeployingStep [project=demo, release=r1, plan=beta, step=s1, description=]",
+				"script #3 -- deploy beta/s1",
+				"journal-statement #3 journal StepDeployed [project=demo, release=r1, plan=beta, step=s1, description=]",
+				"journal-statement #3 journal PlanDeployed [project=demo, release=r1, plan=beta, description=]",
+				"journal-statement #3 journal ReleaseDeployed [project=demo, release=r1, description=]",
+				"commit #3"
 			],
 			_driver.Events );
+	}
+
+	/// <summary>
+	/// The journal's schema must exist before the journal can be read, and DDL auto-commits on some
+	/// engines, so sharing a transaction with the reads would implicitly end it part-way.
+	/// </summary>
+	[Fact]
+	public void PreparingTheJournalCommitsOnItsOwnBeforeTheQueriesRun()
+	{
+		BundleManifest manifest = Manifest( [Release( "r1" )], [Plan( "a", "r1", "s1" )] );
+
+		Deploy( manifest, DeploymentCommitLevel.Release );
+
+		Assert.Equal( ["PrepareJournal"], _driver.Transactions[0].Journaled );
+		Assert.True( _driver.Transactions[0].Committed );
+
+		// the reads are their own transaction, so the two queries cannot disagree
+		Assert.Equal(
+			[( "journal GetLatestRelease" )],
+			_driver.Transactions[1].JournalingCalls.Select( call => call.Statement ) );
+	}
+
+	/// <summary>
+	/// A deployment that read a resumable release runs both queries, and both in the read
+	/// transaction — never one there and one later.
+	/// </summary>
+	[Fact]
+	public void BothJournalQueriesShareOneTransaction()
+	{
+		BundleManifest manifest = Manifest(
+			[Release( "r1" )],
+			[Plan( "a", "r1", "s1" ), Plan( "b", "r1", "s1" )] );
+
+		_journal.Latest = new JournaledRelease( "r1", Completed: false );
+		_journal.DeployedPlans["r1"] = ["a"];
+
+		Deploy( manifest, DeploymentCommitLevel.Release );
+
+		Assert.Equal(
+			["journal GetLatestRelease", "journal GetDeployedPlans"],
+			_driver.Transactions[1].JournalingCalls.Select( call => call.Statement ) );
+		Assert.True( _driver.Transactions[1].Committed );
 	}
 
 	// -------------------------------------------------------- what the host is told
@@ -633,16 +692,26 @@ public class DeploymentEngineTests
 	private IReadOnlyList<string> Deployed( string release )
 		=> _journal.DeployedPlans.TryGetValue( release, out List<string>? plans ) ? plans : [];
 
-	/// <summary>A refused bundle must leave the database exactly as it was.</summary>
-	private void AssertNothingHappened()
+	/// <summary>
+	/// A refused bundle changes nothing: no script ran and the journal gained no release.
+	/// <paramref name="transactions"/> says how far the refusal got — 0 for a malformed manifest,
+	/// refused before the database is touched at all, and 2 where the refusal depends on what the
+	/// journal says, which means the journal was necessarily prepared and read first.
+	/// </summary>
+	private void AssertNothingWasDeployed( int transactions )
 	{
-		Assert.Empty( _driver.Transactions );
+		Assert.Equal( transactions, _driver.Transactions.Count );
 		Assert.Empty( _driver.AppliedScripts );
 		Assert.Empty( _journal.StartedReleases );
 	}
 
 	private void Deploy( BundleManifest manifest, DeploymentCommitLevel commitLevel )
-		=> new DeploymentEngine(
-				_driver, _journal, ReaderFor( manifest, _layout ), _layout, commitLevel, _listener )
+	{
+		_journal.Attach( _driver );
+
+		new DeploymentEngine(
+				_driver, FakeJournal.Statements(), ReaderFor( manifest, _layout ), _layout, commitLevel,
+				_listener )
 			.Deploy( manifest );
+	}
 }

@@ -13,4 +13,5 @@ public static class FileNames
 	public const string PlansDirectory = "plans";
 	public const string StepsDirectory = "steps";
 	public const string ReleasesDirectory = "releases";
+	public const string JournalingDirectory = "journaling";
 }

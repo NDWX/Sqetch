@@ -18,21 +18,18 @@ public class DeployCliTests : IDisposable
 {
 	private readonly string _root;
 	private readonly FakeDatabaseDriver _driver = new ();
-	private readonly FakeJournalWriter _journal;
+	private readonly FakeJournal _journal = new ();
 	private readonly FakeDriverFactory _factory;
 	private readonly DatabaseDriverRegistry _drivers = new ();
-	private readonly ChangeJournalWriterRegistry _journals = new ();
 
 	public DeployCliTests()
 	{
 		_root = Path.Combine( Path.GetTempPath(), "sqetch-deploy-cli-tests", Guid.NewGuid().ToString( "N" ) );
 		Directory.CreateDirectory( _root );
 
-		_journal = new FakeJournalWriter( _driver );
 		_factory = new FakeDriverFactory( _driver );
 
 		_drivers.Register( _factory.Name, () => _factory );
-		_journals.Register( "table", () => _journal );
 	}
 
 	public void Dispose()
@@ -61,11 +58,12 @@ public class DeployCliTests : IDisposable
 		Assert.Equal( "db1", _factory.ReceivedParameters!["host"] );
 		Assert.Equal( "app", _factory.ReceivedParameters["database"] );
 
+		// #1 prepares the journal and #2 reads it, so the deployment's own transaction is #3
 		Assert.Equal(
-			["script #1 create table t ()", "script #1 create index i"],
+			["script #3 create table t ()", "script #3 create index i"],
 			_driver.Events.Where( x => x.StartsWith( "script" ) ) );
-		Assert.Contains( "release-deployed #1 2026.07", _driver.Events );
-		Assert.Equal( "commit #1", _driver.Events.Last() );
+		Assert.Equal( ["ReleaseDeployed 2026.07"], _driver.Transactions[2].Journaled.Where( x => x.StartsWith( "ReleaseDeployed" ) ) );
+		Assert.Equal( "commit #3", _driver.Events.Last() );
 	}
 
 	[Fact]
@@ -141,23 +139,26 @@ public class DeployCliTests : IDisposable
 		Assert.Contains( "failed to create database driver 'pg': bad credentials", result.Output );
 	}
 
+	/// <summary>
+	/// The journal is the project's own SQL now and travels in the bundle, so there is nothing to
+	/// select. A pipeline still passing --journal must be told, not silently ignored — which is what
+	/// would happen if the option were merely unused.
+	/// </summary>
 	[Fact]
-	public void UnknownJournalWriterIsRejectedAndAmbiguousDefaultAsksForTheSwitch()
+	public void TheRetiredJournalSwitchIsRejected()
 	{
-		string bundle = WriteBundle( "demo.zip" );
+		CommandAppResult result = Run(
+			"deploy", WriteBundle( "demo.zip" ), "--driver", "pg", "--pg-host", "h", "--pg-database", "d",
+			"--journal", "table" );
 
-		CommandAppResult unknown = Run(
-			"deploy", bundle, "--driver", "pg", "--pg-host", "h", "--pg-database", "d", "--journal", "file" );
+		Assert.Equal( 1, result.ExitCode );
 
-		Assert.Equal( 1, unknown.ExitCode );
-		Assert.Contains( "unknown change journal writer 'file'", unknown.Output );
+		// rejected by the driver-parameter parser: every unrecognized option must carry the driver's
+		// own '--pg-' prefix, so a stale '--journal' is named rather than quietly ignored
+		string message = Regex.Replace( result.Output, @"\s+", " " );
 
-		_journals.Register( "audit", () => _journal );
-
-		CommandAppResult ambiguous = Run( "deploy", bundle, "--driver", "pg", "--pg-host", "h", "--pg-database", "d" );
-
-		Assert.Equal( 1, ambiguous.ExitCode );
-		Assert.Contains( "--journal", ambiguous.Output );
+		Assert.Contains( "--journal", message );
+		Assert.Contains( "--pg-", message );
 	}
 
 	[Fact]
@@ -222,7 +223,9 @@ public class DeployCliTests : IDisposable
 
 		// the two bundles hold the same release, so the second is a deployment in its own right
 		// only against a database that has not seen the first
-		_journal.Forget();
+		_journal.Latest = null;
+		_journal.DeployedPlans.Clear();
+		_journal.StartedReleases.Clear();
 
 		Assert.Equal(
 			0,
@@ -240,7 +243,11 @@ public class DeployCliTests : IDisposable
 
 		Assert.Equal( 0, result.ExitCode );
 		Assert.Contains( "database is up to date", result.Output );
-		Assert.Empty( _driver.Events );
+
+		// the journal is prepared and read on every deployment, so those two transactions are
+		// expected; nothing beyond them ran
+		Assert.Equal( 2, _driver.Transactions.Count );
+		Assert.Empty( _driver.AppliedScripts );
 	}
 
 	[Fact]
@@ -259,7 +266,10 @@ public class DeployCliTests : IDisposable
 
 		Assert.Contains( "release '2026.06' is only partially deployed", message );
 		Assert.Contains( "before release '2026.07'", message );
-		Assert.Empty( _driver.Events );
+
+		// refused from what the journal said, so the journal was prepared and read — and no more
+		Assert.Equal( 2, _driver.Transactions.Count );
+		Assert.Empty( _driver.AppliedScripts );
 	}
 
 	[Fact]
@@ -287,10 +297,13 @@ public class DeployCliTests : IDisposable
 
 	private CommandAppResult Run( params string[] args )
 	{
+		// snapshots the seeded journal state as this run's canned query results, so a test that sets
+		// _journal before calling Run gets the database it described
+		_journal.Attach( _driver );
+
 		TypeRegistrar registrar = new ();
 
 		registrar.RegisterInstance( typeof(IDatabaseDriverRegistry), _drivers );
-		registrar.RegisterInstance( typeof(IChangeJournalWriterRegistry), _journals );
 
 		BundleTypeRegistry bundleTypes = new ();
 		bundleTypes.RegisterBundleTypes();
@@ -319,6 +332,7 @@ public class DeployCliTests : IDisposable
 		Bundle bundle = new (
 			new ProjectDefinition( "demo", "", "postgres" ),
 			BundleSelection.Finalized,
+			Manifests.Journaling(),
 			[new BundleRelease( "2026.07", "", dependency, true )],
 			[
 				new BundlePlan(

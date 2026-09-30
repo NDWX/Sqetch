@@ -5,21 +5,36 @@ namespace Pug.Sqetch.Deployment;
 
 /// <summary>
 /// Executes a bundle's deploy scripts in manifest order against a database, journaling every
-/// event through the change journal writer and starting after whatever the journal says is
-/// already deployed. Where that start lies follows from the journal alone: nothing journaled
+/// event through the project's own SQL — carried in the bundle as
+/// <see cref="JournalingStatements"/> and run by <see cref="StatementJournal"/> — and starting
+/// after whatever the journal says is already deployed. Where that start lies follows from the
+/// journal alone: nothing journaled
 /// deploys the bundle whole, an <em>incompletely</em> deployed release resumes inside itself
 /// (so the bundle must contain it), skipping the plans the journal already holds and deploying
 /// the rest in bundle order, and a <em>completely</em> deployed release hands over to
 /// whichever release depends on it — which may be a release the bundle does not contain,
 /// making this a continuation bundle.
-/// Transactions are committed at plan or release boundaries per
+///
+/// A deployment opens three kinds of transaction, in order. First the journal's own schema, from
+/// the <see cref="JournalingSlot.PrepareJournal"/> slot, committed alone: it must exist before the
+/// journal can be read, and DDL auto-commits on some engines, which would implicitly end a
+/// transaction shared with anything else. Then both journal queries together, so the resume
+/// decision is made from one consistent view rather than two independent round trips. Then the
+/// deployment itself, committed at plan or release boundaries per
 /// <see cref="DeploymentCommitLevel"/>; a release's completion is always journaled in the
 /// same transaction as its last plan. On failure the open transaction is rolled back and
 /// the failure rethrown — earlier boundary commits stand.
+///
+/// Note for the rollback work: rolling a deployment back cannot be "roll back the open
+/// transaction", because a maintainer will be able to ask for rollback regardless of commit level
+/// and the earlier boundary commits are already durable. It has to be a compensating path that
+/// runs the rollback scripts of what this run deployed, in reverse, and journals it through the
+/// <c>RollingBack*</c>/<c>RolledBack*</c> slots — which is why transaction bookkeeping here is
+/// kept separate from any record of what was deployed.
 /// </summary>
 public class DeploymentEngine(
 	IDatabaseDriver driver,
-	IChangeJournalWriter journal,
+	JournalingStatements statements,
 	IBundleReader reader,
 	IBundleLayout layout,
 	DeploymentCommitLevel commitLevel,
@@ -29,36 +44,100 @@ public class DeploymentEngine(
 	{
 		List<ReleaseGroup> groups = Group( manifest );
 
-		JournaledRelease? latest = journal.GetLatestRelease( driver );
+		StatementJournal journal = new ( statements, manifest.Project.Name );
+
+		Prepare( journal );
+
+		(JournaledRelease? latest, List<string>? deployedPlans) = Read( journal, groups );
 
 		if( latest is null )
 		{
-			Deploy( groups, deployedPlans: null );
+			Deploy( groups, journal, deployedPlans: null );
 
 			return;
 		}
 
 		if( latest.Completed )
 		{
-			Deploy( groups, latest, deployedPlans: null);
+			Deploy( groups, journal, latest, deployedPlans: null);
 
 			return;
 		}
-
-		// an incompletely deployed release must finish before any later release, so a bundle that
-		// does not contain it cannot be deployed at all; checked before its plans are queried,
-		// since a bundle that cannot be used is not worth the round trip
-		if( !groups.Any( group => string.Equals( group.Name, latest.Name, StringComparison.Ordinal ) ) )
-			throw new IncompatibleBundleException(
-				latest,
-				$"{Describe( latest.Name )} is only partially deployed; deploy a bundle that contains it "
-				+ $"so its remaining plans deploy{( groups.Count > 0 ? $" before {Describe( groups[0].Name )}" : "" )}." );
 
 		// the journal's plans are a set, not a position: resuming by membership is unaffected by
 		// the order the bundle lists plans in, which is only partly determined — plans with no
 		// dependency between them are ordered by registration, which the journal never records.
 		// An empty set resumes at the release's first plan, without journaling its start again.
-		Deploy( groups, latest, journal.GetDeployedPlans( latest.Name, driver ).ToList());
+		Deploy( groups, journal, latest, deployedPlans );
+	}
+
+	/// <summary>
+	/// Runs the journal's provisioning statements and commits them on their own, before anything
+	/// reads or writes the journal. It runs on every deployment, so the project's SQL has to be
+	/// safe against an already-provisioned database. The listener is deliberately not told about
+	/// this commit: it is not deployment progress, and reporting it would have an up-to-date
+	/// database announce a commit before saying it had nothing to do.
+	/// </summary>
+	private void Prepare( StatementJournal journal )
+	{
+		IDatabaseTransaction transaction = driver.BeginTransaction();
+
+		try
+		{
+			journal.PrepareJournal( transaction );
+
+			transaction.Commit();
+		}
+		catch
+		{
+			transaction.Rollback();
+
+			throw;
+		}
+	}
+
+	/// <summary>
+	/// Reads where the database stands, both queries in one transaction so the two cannot disagree.
+	/// Returns the deployed plans only for a release that is incompletely deployed — nothing else
+	/// resumes into one, so nothing else needs them.
+	/// </summary>
+	private (JournaledRelease? Latest, List<string>? DeployedPlans) Read(
+		StatementJournal journal, List<ReleaseGroup> groups )
+	{
+		IDatabaseTransaction transaction = driver.BeginTransaction();
+
+		try
+		{
+			JournaledRelease? latest = journal.GetLatestRelease( transaction );
+
+			if( latest is null || latest.Completed )
+			{
+				transaction.Commit();
+
+				return (latest, null);
+			}
+
+			// an incompletely deployed release must finish before any later release, so a bundle that
+			// does not contain it cannot be deployed at all; checked before its plans are queried,
+			// since a bundle that cannot be used is not worth the round trip
+			if( !groups.Any( group => string.Equals( group.Name, latest.Name, StringComparison.Ordinal ) ) )
+				throw new IncompatibleBundleException(
+					latest,
+					$"{Describe( latest.Name )} is only partially deployed; deploy a bundle that contains it "
+					+ $"so its remaining plans deploy{( groups.Count > 0 ? $" before {Describe( groups[0].Name )}" : "" )}." );
+
+			List<string> deployedPlans = journal.GetDeployedPlans( latest.Name, transaction ).ToList();
+
+			transaction.Commit();
+
+			return (latest, deployedPlans);
+		}
+		catch
+		{
+			transaction.Rollback();
+
+			throw;
+		}
 	}
 
 	/// <summary>
@@ -68,7 +147,7 @@ public class DeploymentEngine(
 	/// depending on it; neither starts at the bundle's first group.
 	/// <paramref name="latestJournaledRelease"/> is diagnostic context for refusals only.
 	/// </summary>
-	private void Deploy(List<ReleaseGroup> groups,
+	private void Deploy(List<ReleaseGroup> groups, StatementJournal journal,
 		JournaledRelease? latestJournaledRelease = null, IReadOnlyCollection<string>? deployedPlans = null)
 	{
 		IDatabaseTransaction? transaction = null;
@@ -206,8 +285,7 @@ public class DeploymentEngine(
 			if (latestJournaledRelease is null || !string.Equals(latestJournaledRelease.Name, release.Name))
 			{
 				listener.DeployingRelease(release.Name);
-				journal.DeployingRelease(new DeploymentUnit(release.Name, release.Description),
-					Transaction());
+				journal.DeployingRelease( release.Name, release.Description, Transaction() );
 			}
 
 			// if deployePlans is not null, then we're continuing incomplete release from previous deployment.
@@ -224,7 +302,7 @@ public class DeploymentEngine(
 						continue;
 					}
 
-					DeployPlan(release.Name, plan, Transaction, listener);
+					DeployPlan(release.Name, plan, journal, Transaction, listener);
 
 					if (commitLevel == DeploymentCommitLevel.Plan && index < release.Plans.Count - 1)
 						CommitBoundary();
@@ -235,14 +313,14 @@ public class DeploymentEngine(
 				for (int index = 0; index < release.Plans.Count; index++)
 				{
 					BundleManifestPlan plan = release.Plans[index];
-					DeployPlan(release.Name, plan, Transaction, listener);
+					DeployPlan(release.Name, plan, journal, Transaction, listener);
 
 					if (commitLevel == DeploymentCommitLevel.Plan && index < release.Plans.Count - 1)
 						CommitBoundary();
 				}
 			}
 				
-			journal.ReleaseDeployed(release.Name, Transaction());
+			journal.ReleaseDeployed( release.Name, release.Description, Transaction() );
 			listener.ReleaseDeployed(release.Name);
 
 			CommitBoundary();
@@ -286,16 +364,16 @@ public class DeploymentEngine(
 	}
 
 	private void DeployPlan(
-		string release, BundleManifestPlan plan,
+		string release, BundleManifestPlan plan, StatementJournal journal,
 		Func<IDatabaseTransaction> transaction, IDeploymentListener listener )
 	{
 		listener.DeployingPlan( release, plan.Name );
-		journal.DeployingPlan( new Plan( release, plan.Name, plan.Description ), transaction() );
+		journal.DeployingPlan( release, plan.Name, plan.Description, transaction() );
 
 		foreach( BundleManifestStep step in plan.Steps )
 		{
 			listener.DeployingStep( release, plan.Name, step.Name );
-			journal.DeployingStep( new Step( release, plan.Name, step.Name, step.Description ), transaction() );
+			journal.DeployingStep( release, plan.Name, step.Name, step.Description, transaction() );
 
 			string script = ReadDeployScript( plan.Name, step.Name );
 
@@ -308,11 +386,11 @@ public class DeploymentEngine(
 				throw new StepScriptFailedException( release, plan.Name, step.Name, exception );
 			}
 
-			journal.StepDeployed( release, plan.Name, step.Name, transaction() );
+			journal.StepDeployed( release, plan.Name, step.Name, step.Description, transaction() );
 			listener.StepDeployed( release, plan.Name, step.Name );
 		}
 
-		journal.PlanDeployed( release, plan.Name, transaction() );
+		journal.PlanDeployed( release, plan.Name, plan.Description, transaction() );
 		listener.PlanDeployed( release, plan.Name );
 	}
 

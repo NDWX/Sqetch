@@ -29,7 +29,6 @@ public static class SqetchDeployApp
 		TypeRegistrar registrar = new ();
 
 		registrar.RegisterInstance( typeof(IDatabaseDriverRegistry), new DatabaseDriverRegistry() );
-		registrar.RegisterInstance( typeof(IChangeJournalWriterRegistry), new ChangeJournalWriterRegistry() );
 		registrar.RegisterInstance( typeof(IBundleTypeRegistry), bundleTypes );
 		registrar.RegisterInstance( typeof(IBundleLayoutRegistry), layouts );
 

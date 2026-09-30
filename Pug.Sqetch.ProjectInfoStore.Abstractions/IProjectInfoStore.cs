@@ -79,4 +79,16 @@ public interface IProjectInfoStore : IDisposable
 	void AddReleasePlan( string release, string name, ActionContext context );
 
 	void DeleteReleasePlan( string release, string name, ActionContext context );
+
+	/// <summary>
+	/// Project-level journaling SQL, one statement set per <see cref="JournalingSlot"/>. Not on
+	/// <see cref="IScriptsStore"/>: that store is step-keyed with three fixed slots and hands out
+	/// caller-disposed streams, whereas these are project-level and must be split into individual
+	/// statements before use, so they are plain strings. Returns <c>null</c> for a slot that was
+	/// never set — projects created before this feature have no 'journaling' folder, and there is
+	/// no migration.
+	/// </summary>
+	string? GetJournalingStatement( JournalingSlot slot );
+
+	void SetJournalingStatement( JournalingSlot slot, string statement );
 }

@@ -58,7 +58,8 @@ public class Project : IProject
 	private readonly IReleaseDependencyDeterminator _releaseDependencyDeterminator;
 
 	private readonly SemaphoreSlim _plansSemaphore = new ( 1, 1 ),
-									_releasesSemaphore = new ( 1, 1 );
+									_releasesSemaphore = new ( 1, 1 ),
+									_journalingSemaphore = new ( 1, 1 );
 
 	private readonly UserInfo _userInfo;
 
@@ -940,11 +941,79 @@ public class Project : IProject
 
 	}
 
+	public string? GetJournalingStatement( JournalingSlot slot )
+	{
+		_journalingSemaphore.Wait();
+
+		using TransactionScope tx = new ();
+
+		try
+		{
+			string? statement = _infoStore.GetJournalingStatement( slot );
+
+			tx.Complete();
+
+			return statement;
+		}
+		finally
+		{
+			_journalingSemaphore.Release();
+		}
+	}
+
+	public void SetJournalingStatement( JournalingSlot slot, string statement )
+	{
+		ArgumentNullException.ThrowIfNull( statement, nameof(statement) );
+
+		// validate before it ever reaches the store, so a malformed statement cannot be set
+		JournalingStatements.Parse( slot, statement );
+
+		_journalingSemaphore.Wait();
+
+		using TransactionScope tx = new ();
+
+		try
+		{
+			_infoStore.SetJournalingStatement( slot, statement );
+
+			tx.Complete();
+		}
+		finally
+		{
+			_journalingSemaphore.Release();
+		}
+	}
+
+	public void VerifyJournalingStatements()
+	{
+		_journalingSemaphore.Wait();
+
+		using TransactionScope tx = new ();
+
+		try
+		{
+			Dictionary<JournalingSlot, string?> text = JournalingSlots.All.ToDictionary(
+				slot => slot, slot => _infoStore.GetJournalingStatement( slot ) );
+
+			IReadOnlyList<JournalingSlot> missing = JournalingStatements.Missing( text );
+
+			if( missing.Count > 0 )
+				throw new MissingJournalingStatementsException( missing );
+
+			tx.Complete();
+		}
+		finally
+		{
+			_journalingSemaphore.Release();
+		}
+	}
+
 	public void Dispose()
 	{
 		_infoStore.Dispose();
 		_scriptsStore.Dispose();
 		_plansSemaphore.Dispose();
+		_journalingSemaphore.Dispose();
 
 		GC.SuppressFinalize(this);
 	}

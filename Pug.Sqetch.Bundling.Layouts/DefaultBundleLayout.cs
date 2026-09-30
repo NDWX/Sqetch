@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -5,7 +6,9 @@ namespace Pug.Sqetch.Bundling;
 
 /// <summary>
 /// Default bundle layout: 'manifest.json' first — so streaming consumers see it before the
-/// payload — then 'plans/&lt;plan&gt;/steps/&lt;step&gt;/{deploy,verify,rollback}.sql'.
+/// payload — then the project's journaling SQL as 'journaling/&lt;slot&gt;.sql', then
+/// 'plans/&lt;plan&gt;/steps/&lt;step&gt;/{deploy,verify,rollback}.sql'.
+/// Journaling precedes the plans because a deployment needs it before it may run any script.
 /// Scripts live under 'plans/' so a plan named like the manifest file cannot collide with
 /// it. The order of the manifest arrays is the deployment order and part of the contract.
 /// </summary>
@@ -28,6 +31,10 @@ public sealed class DefaultBundleLayout : IBundleLayout
 	{
 		using( MemoryStream manifest = new ( JsonSerializer.SerializeToUtf8Bytes( Manifest( bundle ), JsonOptions ) ) )
 			writer.Add( ManifestEntry, manifest );
+
+		foreach( JournalingSlot slot in JournalingSlots.All )
+			using( MemoryStream statement = new ( Encoding.UTF8.GetBytes( bundle.Journaling.Text( slot ) ) ) )
+				writer.Add( JournalingPath( slot ), statement );
 
 		foreach( BundlePlan plan in bundle.Plans )
 			foreach( BundleStep step in plan.Steps )
@@ -58,8 +65,56 @@ public sealed class DefaultBundleLayout : IBundleLayout
 		return Normalize( manifest );
 	}
 
+	public JournalingStatements ReadJournalingStatements( IBundleReader reader )
+	{
+		Dictionary<JournalingSlot, string?> text = new ();
+		List<string> missing = new ();
+
+		foreach( JournalingSlot slot in JournalingSlots.All )
+		{
+			string path = JournalingPath( slot );
+
+			if( !reader.Contains( path ) )
+			{
+				missing.Add( path );
+
+				continue;
+			}
+
+			using Stream entry = reader.Open( path );
+
+			// StreamReader strips a byte-order mark; one left in place would be sent to the
+			// server as part of the slot's first statement
+			using StreamReader content = new ( entry );
+
+			text[slot] = content.ReadToEnd();
+		}
+
+		if( missing.Count > 0 )
+			throw new BundlingException(
+				$"Bundle is missing journaling statements: {string.Join( ", ", missing )}." );
+
+		try
+		{
+			return new JournalingStatements( text );
+		}
+		catch( ArgumentException exception )
+		{
+			// present but blank, or a query slot holding more than one statement
+			throw new BundlingException( $"Bundle has invalid journaling statements: {exception.Message}" );
+		}
+	}
+
 	public string ScriptPath( string plan, string step, StepScriptKind kind )
 		=> $"plans/{plan}/steps/{step}/{kind.ToString().ToLowerInvariant()}.sql";
+
+	/// <summary>
+	/// Entry path of a journaling slot. Private on purpose: consumers go through
+	/// <see cref="ReadJournalingStatements"/>, so nothing outside this layout depends on where the
+	/// statements sit. The file name comes from <see cref="JournalingSlots.FileName"/>, the same
+	/// helper the project info store uses, so the two can never drift apart.
+	/// </summary>
+	private static string JournalingPath( JournalingSlot slot ) => $"journaling/{JournalingSlots.FileName( slot )}";
 
 	private static BundleManifest Manifest( Bundle bundle )
 		=> new (

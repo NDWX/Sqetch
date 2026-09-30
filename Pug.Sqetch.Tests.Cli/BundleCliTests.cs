@@ -47,10 +47,24 @@ public class BundleCliTests : IDisposable
 		return tester.Run( args );
 	}
 
-	private void InitializeProject()
+	private void InitializeProject( bool withJournaling = true )
 	{
 		Assert.Equal( 0, Run( "project", "user", "tester", "tester@example.com" ).ExitCode );
 		Assert.Equal( 0, Run( "project", "init", "demo", "--shard-by-prefix" ).ExitCode );
+
+		if( withJournaling )
+			SetJournaling();
+	}
+
+	/// <summary>
+	/// Every journaling slot, which 'bundle' requires. The statements deliberately do not start with
+	/// '--': a positional argument beginning with two dashes is parsed as an option, so SQL opening
+	/// with a comment has to be supplied through --file or --stdin.
+	/// </summary>
+	private static void SetJournaling()
+	{
+		foreach( JournalingSlot slot in JournalingSlots.All )
+			Assert.Equal( 0, Run( "journaling", "set", slot.ToString(), $"select '{slot}'" ).ExitCode );
 	}
 
 	/// <summary>Plan 'table' with step 'create' in finalized release 2026.07.</summary>
@@ -82,7 +96,13 @@ public class BundleCliTests : IDisposable
 				"plans/table/steps/create/verify.sql",
 				"plans/table/steps/create/rollback.sql"
 			],
-			archive.Entries.Select( x => x.FullName ).ToArray() );
+			archive.Entries.Select( x => x.FullName ).Where( x => !x.StartsWith( "journaling/" ) ).ToArray() );
+
+		// the project's journaling SQL travels with the bundle, between the manifest and the plans
+		Assert.Equal( 15, archive.Entries.Count( x => x.FullName.StartsWith( "journaling/" ) ) );
+		Assert.Equal(
+			"select 'PrepareJournal'",
+			new StreamReader( archive.GetEntry( "journaling/PrepareJournal.sql" )!.Open() ).ReadToEnd().Trim() );
 
 		using JsonDocument manifest = JsonDocument.Parse(
 			new StreamReader( archive.GetEntry( "manifest.json" )!.Open() ).ReadToEnd() );
@@ -222,6 +242,39 @@ public class BundleCliTests : IDisposable
 
 		Assert.Equal( 1, result.ExitCode );
 		Assert.Contains( "nothing to bundle", result.Output );
+	}
+
+	/// <summary>
+	/// A bundle journals through the project's own SQL, so bundling without it is refused — and the
+	/// error names every unset slot, since a maintainer setting them up wants the whole list.
+	/// </summary>
+	[Fact]
+	public void BundlingWithoutJournalingStatementsIsRefusedNamingThem()
+	{
+		InitializeProject( withJournaling: false );
+		CreateFinalizedRelease();
+
+		CommandAppResult result = Run( "bundle" );
+
+		Assert.Equal( 1, result.ExitCode );
+		Assert.Contains( "DeployingRelease", result.Output );
+		Assert.Contains( "GetDeployedPlans", result.Output );
+		Assert.Empty( Directory.GetFiles( _root, "*.zip" ) );
+	}
+
+	[Fact]
+	public void JournalingIsListedAsUnsetUntilItIsSet()
+	{
+		InitializeProject( withJournaling: false );
+
+		CommandAppResult before = Run( "journaling", "list" );
+
+		Assert.Equal( 0, before.ExitCode );
+		Assert.Equal( 15, before.Output.Split( '\n', StringSplitOptions.RemoveEmptyEntries ).Length );
+
+		SetJournaling();
+
+		Assert.DoesNotContain( "no", Run( "journaling", "list" ).Output );
 	}
 
 	[Fact]

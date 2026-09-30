@@ -24,6 +24,15 @@ public sealed class ProjectPaths
 
 	public string ReleasesDirectory => Path.Combine( Root, FileNames.ReleasesDirectory );
 
+	public string JournalingDirectory => Path.Combine( Root, FileNames.JournalingDirectory );
+
+	/// <summary>
+	/// Where a slot's statement text lives, named through <see cref="JournalingSlots.FileName"/> so
+	/// the store and the bundle layout never drift apart.
+	/// </summary>
+	public string JournalingStatementFile( JournalingSlot slot )
+		=> Path.Combine( JournalingDirectory, JournalingSlots.FileName( slot ) );
+
 	public string PlanDirectory( string release, string plan )
 		=> string.IsNullOrEmpty( release )
 			? Path.Combine( PlansDirectory, plan )

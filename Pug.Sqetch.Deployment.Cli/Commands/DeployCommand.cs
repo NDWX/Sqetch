@@ -8,7 +8,6 @@ namespace Pug.Sqetch.Deployment;
 public sealed class DeployCommand(
 	IAnsiConsole console,
 	IDatabaseDriverRegistry drivers,
-	IChangeJournalWriterRegistry journals,
 	IBundleTypeRegistry bundleTypes,
 	IBundleLayoutRegistry layouts )
 	: Command<DeploymentSettings>
@@ -21,9 +20,9 @@ public sealed class DeployCommand(
 
 		IBundleLayout layout = layouts.Create( DefaultBundleLayout.LayoutName );
 
-		// validation confirms the manifest and every listed script before anything touches
-		// the database
-		BundleManifest manifest = BundleValidator.Validate( reader, layout );
+		// validation confirms the manifest, the journaling statements and every listed script
+		// before anything touches the database
+		ValidatedBundle validated = BundleValidator.Validate( reader, layout );
 
 		IDatabaseDriverFactory factory = drivers.Create( settings.Driver! );
 
@@ -40,14 +39,13 @@ public sealed class DeployCommand(
 			throw new DriverCreationException( factory.Name, exception );
 		}
 
-		IChangeJournalWriter journal = journals.Create( settings.Journal );
-
 		using ConsoleDeploymentListener listener = new ( console, settings.Log );
 
 		try
 		{
-			new DeploymentEngine( driver, journal, reader, layout, settings.Level, listener )
-				.Deploy( manifest );
+			new DeploymentEngine(
+					driver, validated.Journaling, reader, layout, settings.Level, listener )
+				.Deploy( validated.Manifest );
 		}
 		catch( Exception exception )
 		{

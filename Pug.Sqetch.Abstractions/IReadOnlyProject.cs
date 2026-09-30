@@ -39,4 +39,18 @@ public interface IReadOnlyProject : IDisposable
 	/// each release, ties broken by registration time.
 	/// </summary>
 	IEnumerable<ProjectPlan> GetPlans( PlanSearchCriteria criteria );
+
+	/// <summary>
+	/// The project's journaling SQL for <paramref name="slot"/>, or <c>null</c> when it has not
+	/// been set. On this interface, not <see cref="IProject"/>, because <c>BundleBuilder</c> holds
+	/// an <see cref="IReadOnlyProject"/> and reads it from there.
+	/// </summary>
+	string? GetJournalingStatement( JournalingSlot slot );
+
+	/// <summary>
+	/// Confirms every <see cref="JournalingSlot"/> has a statement; throws
+	/// <see cref="MissingJournalingStatementsException"/> naming every missing slot, unlike
+	/// <see cref="VerifyStepScripts"/> which stops at the first failing step.
+	/// </summary>
+	void VerifyJournalingStatements();
 }

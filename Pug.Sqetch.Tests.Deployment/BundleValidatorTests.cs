@@ -10,16 +10,58 @@ public class BundleValidatorTests
 	private readonly DefaultBundleLayout _layout = new ();
 
 	[Fact]
-	public void CompleteBundlesPassAndReturnTheManifest()
+	public void CompleteBundlesPassAndReturnTheManifestAndJournaling()
 	{
 		BundleManifest manifest = Manifest( [Release( "r1" )], [Plan( "a", "r1", "s1" )] );
 		InMemoryBundleReader reader = ReaderFor( manifest, _layout );
 
 		reader.Add( "manifest.json", ManifestJson( manifest ) );
 
-		BundleManifest read = BundleValidator.Validate( reader, _layout );
+		ValidatedBundle read = BundleValidator.Validate( reader, _layout );
 
-		Assert.Equal( "a", Assert.Single( read.Plans ).Name );
+		Assert.Equal( "a", Assert.Single( read.Manifest.Plans ).Name );
+		Assert.Equal(
+			[FakeJournal.Marker( JournalingSlot.PrepareJournal )],
+			read.Journaling.Statements( JournalingSlot.PrepareJournal ) );
+		Assert.Equal(
+			FakeJournal.Marker( JournalingSlot.GetLatestRelease ),
+			read.Journaling.Text( JournalingSlot.GetLatestRelease ) );
+	}
+
+	/// <summary>
+	/// Journaling is read before any driver exists, so a bundle that could never be journaled is
+	/// refused without the database being touched.
+	/// </summary>
+	[Fact]
+	public void EveryMissingJournalingStatementIsListed()
+	{
+		BundleManifest manifest = Manifest( [Release( "r1" )], [Plan( "a", "r1", "s1" )] );
+		InMemoryBundleReader reader = ReaderFor( manifest, _layout );
+
+		reader.Add( "manifest.json", ManifestJson( manifest ) );
+		reader.Remove( "journaling/PrepareJournal.sql" );
+		reader.Remove( "journaling/OnDeployingStep.sql" );
+
+		BundlingException error = Assert.Throws<BundlingException>(
+			() => BundleValidator.Validate( reader, _layout ) );
+
+		Assert.Contains( "journaling/PrepareJournal.sql", error.Message );
+		Assert.Contains( "journaling/OnDeployingStep.sql", error.Message );
+	}
+
+	[Fact]
+	public void AQueryStatementBundledWithTwoStatementsIsRefused()
+	{
+		BundleManifest manifest = Manifest( [Release( "r1" )], [Plan( "a", "r1", "s1" )] );
+		InMemoryBundleReader reader = ReaderFor( manifest, _layout );
+
+		reader.Add( "manifest.json", ManifestJson( manifest ) );
+		reader.Add( "journaling/GetDeployedPlans.sql", "select 1\n;;\nselect 2" );
+
+		BundlingException error = Assert.Throws<BundlingException>(
+			() => BundleValidator.Validate( reader, _layout ) );
+
+		Assert.Contains( "GetDeployedPlans is a query", error.Message );
 	}
 
 	[Fact]
@@ -55,6 +97,7 @@ public class BundleValidatorTests
 			new Bundle(
 				new ProjectDefinition( manifest.Project.Name, manifest.Project.Description, manifest.Project.Engine ),
 				manifest.Selection,
+				Journaling(),
 				manifest.Releases
 						.Select( release => new BundleRelease(
 									release.Name, release.Description, release.Dependency, release.Finalized ) )
