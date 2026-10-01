@@ -182,7 +182,11 @@ dotnet run --project Pug.Sqetch.Deployment.Cli -- deploy <bundle> --driver sqlit
   than failing. `RealDatabaseDeployment` holds the end-to-end scenarios so both providers run the
   same ones — the only place the engine's resume decision is read back out of SQL the deployment
   itself wrote, and the only check that a journal's `completed` column works as both a count
-  (SQLite) and a boolean (PostgreSQL).
+  (SQLite) and a boolean (PostgreSQL). Compensating rollback is among them: that a committed plan is
+  undone by its own `rollback.sql`, that `on-success` undoes releases and their plans in reverse,
+  and that a failing rollback script leaves no half-finished compensation behind — the last of which
+  only a real server can show, since it turns on the compensation transaction rolling its journal
+  rows back with it.
 - **Names** (`NameRules` in the FileSystem store, surfaced early via CLI `NameValidation`):
   letters, digits and `-_+()@#.`; must start with a letter or digit, must not end with `.`,
   max 128 chars. Names become path segments and git paths.

@@ -143,28 +143,120 @@ public sealed class RealDatabaseDeployment(
 		Assert.Equal( ["r1", "r2"], Journal( "ReleaseDeployed" ) );
 	}
 
+	// ------------------------------------------------------------------ compensating rollback
+
+	/// <summary>
+	/// The claim that makes rollback compensating rather than transactional, against a server that
+	/// could prove it wrong: at plan commit level the plan before the failure is already durable, so
+	/// no database transaction could take it back — only its own rollback script can, and the engine
+	/// has to run it.
+	/// </summary>
+	public void OnErrorUndoesWhatTheRunAlreadyCommitted()
+	{
+		BundleManifest manifest = TwoReleases();
+
+		InMemoryBundleReader broken = Scripts( manifest );
+
+		broken.Add( _layout.ScriptPath( "b", "s1", StepScriptKind.Deploy ), "insert into nowhere ( id ) values ( 1 )" );
+
+		Assert.Throws<StepScriptFailedException>(
+			() => Deploy( manifest, broken, DeploymentCommitLevel.Plan, rollback: DeploymentRollbackMode.OnError ) );
+
+		// a was committed and is now compensated for; b never reached the database
+		Assert.Empty( StepTables() );
+
+		Assert.Equal(
+			[
+				"DeployingRelease|r1||", "DeployingPlan|r1|a|", "DeployingStep|r1|a|s1", "StepDeployed|r1|a|s1",
+				"PlanDeployed|r1|a|",
+				"RollingBackRelease|r1||", "RollingBackPlan|r1|a|", "RollingBackStep|r1|a|s1",
+				"RolledBackStep|r1|a|s1", "RolledBackPlan|r1|a|", "RolledBackRelease|r1||"
+			],
+			Journal() );
+	}
+
+	/// <summary>
+	/// Proving a bundle applies cleanly and leaving the database as it was. Releases are undone in
+	/// reverse, and the plans within a release with them — asserted here rather than inferred,
+	/// because the order is the one thing a compensating rollback cannot get wrong.
+	/// </summary>
+	public void OnSuccessUndoesTheWholeDeploymentInReverse()
+	{
+		BundleManifest manifest = TwoReleases();
+
+		Deploy( manifest, Scripts( manifest ), rollback: DeploymentRollbackMode.OnSuccess );
+
+		Assert.Empty( StepTables() );
+
+		Assert.Equal(
+			[
+				"RollingBackRelease|r2||", "RollingBackPlan|r2|c|", "RollingBackStep|r2|c|s1",
+				"RolledBackStep|r2|c|s1", "RolledBackPlan|r2|c|", "RolledBackRelease|r2||",
+				"RollingBackRelease|r1||",
+				"RollingBackPlan|r1|b|", "RollingBackStep|r1|b|s1", "RolledBackStep|r1|b|s1", "RolledBackPlan|r1|b|",
+				"RollingBackPlan|r1|a|", "RollingBackStep|r1|a|s1", "RolledBackStep|r1|a|s1", "RolledBackPlan|r1|a|",
+				"RolledBackRelease|r1||"
+			],
+			Journal().Where( row => row.Contains( "RollingBack" ) || row.Contains( "RolledBack" ) ) );
+	}
+
+	/// <summary>
+	/// A rollback script that fails replaces the failure that triggered it, and its transaction is
+	/// rolled back rather than left half applied — so the journal shows no compensation that did not
+	/// finish, and the deployed table is still there to be dealt with by hand.
+	/// </summary>
+	public void AFailingRollbackScriptLeavesNoHalfFinishedCompensation()
+	{
+		BundleManifest manifest = TwoReleases();
+
+		InMemoryBundleReader broken = Scripts( manifest );
+
+		broken.Add( _layout.ScriptPath( "b", "s1", StepScriptKind.Deploy ), "insert into nowhere ( id ) values ( 1 )" );
+		broken.Add( _layout.ScriptPath( "a", "s1", StepScriptKind.Rollback ), "drop table nowhere_at_all" );
+
+		RollbackFailedException error = Assert.Throws<RollbackFailedException>(
+			() => Deploy( manifest, broken, DeploymentCommitLevel.Plan, rollback: DeploymentRollbackMode.OnError ) );
+
+		Assert.Equal( ( "r1", "a", "s1" ), (error.Release, error.Plan, error.Step) );
+
+		Assert.Equal( ["a_s1"], StepTables() );
+		Assert.Empty( Journal().Where( row => row.Contains( "RollingBack" ) || row.Contains( "RolledBack" ) ) );
+	}
+
 	// ------------------------------------------------------------------ helpers
 
 	private void Deploy(
 		BundleManifest manifest, IBundleReader reader,
-		DeploymentCommitLevel level = DeploymentCommitLevel.Release, RecordingListener? listener = null )
+		DeploymentCommitLevel level = DeploymentCommitLevel.Release, RecordingListener? listener = null,
+		DeploymentRollbackMode rollback = DeploymentRollbackMode.None )
 	{
 		using IDatabaseDriver owned = driver();
 
-		new DeploymentEngine( owned, journaling, reader, _layout, level, listener ?? new RecordingListener() )
+		new DeploymentEngine(
+				owned, journaling, reader, _layout, level, listener ?? new RecordingListener(), rollback )
 			.Deploy( manifest );
 	}
 
-	/// <summary>A deploy script per step, each creating a table named after the plan and step.</summary>
+	/// <summary>
+	/// A deploy script per step, each creating a table named after the plan and step, and the
+	/// rollback script that undoes it — which is what compensation runs, so it has to be real SQL
+	/// here rather than a marker.
+	/// </summary>
 	private InMemoryBundleReader Scripts( BundleManifest manifest )
 	{
 		InMemoryBundleReader reader = new ();
 
 		foreach( BundleManifestPlan plan in manifest.Plans )
 			foreach( BundleManifestStep step in plan.Steps )
+			{
 				reader.Add(
 					_layout.ScriptPath( plan.Name, step.Name, StepScriptKind.Deploy ),
 					$"create table {plan.Name}_{step.Name} ( id integer primary key )" );
+
+				reader.Add(
+					_layout.ScriptPath( plan.Name, step.Name, StepScriptKind.Rollback ),
+					$"drop table {plan.Name}_{step.Name}" );
+			}
 
 		return reader;
 	}
