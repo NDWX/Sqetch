@@ -34,5 +34,5 @@ public sealed class RollbackSettings : DeploymentSettings
 public sealed class RollbackCommand : Command<RollbackSettings>
 {
 	protected override int Execute( CommandContext context, RollbackSettings settings, CancellationToken cancellationToken )
-		=> throw new DeploymentException( "rollback is not yet supported" );
+		=> throw new OperationNotSupportedException( "rollback is not yet supported" );
 }

@@ -69,11 +69,14 @@ public class AdoDatabaseDriver : IDatabaseDriver
 		{
 			connection.Open();
 		}
-		catch
+		catch( Exception exception )
 		{
 			connection.Dispose();
 
-			throw;
+			// a driver is configured without connecting, so this is the first moment the server is
+			// known to be out of reach — said in those terms rather than as a provider error, since
+			// the caller's remedy is the host, the credentials or the network, not the deployment
+			throw new DatabaseConnectionException( exception );
 		}
 
 		return _connection = connection;

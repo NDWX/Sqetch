@@ -1,10 +1,25 @@
 using Pug.Sqetch.Bundling;
 using Pug.Sqetch.Deployment.DatabaseDriver.Abstractions;
+using Spectre.Console;
+using Spectre.Console.Cli;
 
 namespace Pug.Sqetch.Deployment;
 
 internal static class DeployCliErrors
 {
+	/// <summary>
+	/// Writes the one line a failure gets. Both the central exception handler and the deploy
+	/// command call it: the command reports its own failures because only it knows what the
+	/// deployment left behind, which is what decides its exit code.
+	/// </summary>
+	public static void Report( IAnsiConsole console, Exception exception )
+	{
+		if( exception is CommandAppException { Pretty: not null } parseError )
+			console.Write( parseError.Pretty );
+		else
+			console.MarkupLineInterpolated( $"[red]error:[/] {Describe( exception )}" );
+	}
+
 	public static string Describe( Exception exception )
 		=> exception switch
 		{

@@ -53,12 +53,11 @@ public static class SqetchDeployApp
 		{
 			IAnsiConsole console = resolver?.Resolve( typeof(IAnsiConsole) ) as IAnsiConsole ?? AnsiConsole.Console;
 
-			if( exception is CommandAppException { Pretty: not null } parseError )
-				console.Write( parseError.Pretty );
-			else
-				console.MarkupLineInterpolated( $"[red]error:[/] {DeployCliErrors.Describe( exception )}" );
+			DeployCliErrors.Report( console, exception );
 
-			return 1;
+			// nothing here can know whether a deployment got far enough to change the database, so
+			// the deploy command returns its own code and lets escape only what it never reached
+			return DeployExitCodes.For( exception );
 		} );
 
 		config.AddCommand<DeployCommand>( "deploy" )

@@ -188,6 +188,29 @@ dotnet run --project Pug.Sqetch.Deployment.Cli -- deploy <bundle> --driver sqlit
   and that a failing rollback script leaves no half-finished compensation behind — the last of which
   only a real server can show, since it turns on the compensation transaction rolling its journal
   rows back with it.
+- **`sqetch-deploy` exit codes are categorized** (`DeployExitCodes`, public because they are the
+  contract a pipeline reads): the tens digit names the category and the units digit the failure
+  within it, so a caller can branch on a decade without knowing every member. A units digit of `0`
+  is the category's *unspecified* code, reserved so adding a specific code never renumbers an
+  existing one; a *one-digit* code means unclassified, and `1` is still what an unrecognized
+  exception returns, so a `!= 0` test is unaffected. `0` covers deployed, nothing-to-deploy and
+  deployed-then-undone alike — anything non-zero stops a `set -e` shell, and telling the three
+  apart is the output's job. `10` is every command-line mistake, deliberately undivided: finer
+  codes would mean parsing Spectre's message text or re-implementing its parser, and
+  `CommandParseException` carries no reason of its own. Then `21`/`22`/`23` missing / invalid /
+  incompatible bundle, `31`/`32`/`33` unknown driver / driver creation / database unreachable, `41`/`42`/`43` journal
+  prepare / query / write, `51`/`52` deployment failed with the database unchanged / left partway,
+  `61` rollback failed, `91` not implemented. Two precedence rules carry the operational meaning:
+  a half-compensated database (`61`) outranks the failure that started the rollback, and a database
+  left partway (`52`) outranks the cause of it — the cause stays in the message for whoever fixes
+  it, the code tells a pipeline whether it may retry. `52` therefore needs to know whether anything
+  committed, which only `DeployCommand` does, so **it returns its own code** and the central
+  `SetExceptionHandler` sees only what was raised before the deployment began. `UnknownBundleType`
+  is `10`, not `22` — the only bundle type name is the one `--bundle-type` carries; an unknown
+  *layout* is `1`, since that name is the host's own constant. `33` exists because a driver is
+  configured without connecting: an unreachable server is not a creation failure and does not
+  surface until the first transaction, so `AdoDatabaseDriver` turns a failed open into
+  `DatabaseConnectionException` rather than letting a provider exception reach the handler as `1`.
 - **Names** (`NameRules` in the FileSystem store, surfaced early via CLI `NameValidation`):
   letters, digits and `-_+()@#.`; must start with a letter or digit, must not end with `.`,
   max 128 chars. Names become path segments and git paths.

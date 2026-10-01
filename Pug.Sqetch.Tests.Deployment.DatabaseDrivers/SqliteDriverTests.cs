@@ -283,7 +283,9 @@ public class SqliteDriverTests : IDisposable
 
 	/// <summary>
 	/// The escape hatch for everything 'file' does not cover — including refusing to create a
-	/// database that is not there, which is how a mistyped path is caught.
+	/// database that is not there, which is how a mistyped path is caught. A driver is configured
+	/// without connecting, so the refusal arrives on first use as a connection failure, with the
+	/// provider's own error kept underneath it for whoever needs the detail.
 	/// </summary>
 	[Fact]
 	public void AConnectionStringInReadWriteModeRefusesAMissingFile()
@@ -295,7 +297,11 @@ public class SqliteDriverTests : IDisposable
 			},
 			TimeSpan.FromSeconds( 30 ) );
 
-		Assert.Throws<SqliteException>( () => driver.BeginTransaction() );
+		DatabaseConnectionException error =
+			Assert.Throws<DatabaseConnectionException>( () => driver.BeginTransaction() );
+
+		Assert.IsType<SqliteException>( error.InnerException );
+		Assert.Contains( "could not connect to the database", error.Message );
 	}
 
 	[Fact]

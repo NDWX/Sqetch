@@ -84,7 +84,7 @@ public class DeployCliTests : IDisposable
 		CommandAppResult result = Run(
 			"deploy", WriteBundle( "demo.zip" ), "--driver", "pg", "--pg-bogus", "x", "--pg-host", "db1", "--pg-database", "app" );
 
-		Assert.Equal( 1, result.ExitCode );
+		Assert.Equal( DeployExitCodes.UsageError, result.ExitCode );
 		Assert.Contains( "no parameter 'bogus'", result.Output );
 		Assert.Contains( "--pg-host", result.Output );
 	}
@@ -95,7 +95,7 @@ public class DeployCliTests : IDisposable
 		CommandAppResult result = Run(
 			"deploy", WriteBundle( "demo.zip" ), "--driver", "pg", "--nope", "x" );
 
-		Assert.Equal( 1, result.ExitCode );
+		Assert.Equal( DeployExitCodes.UsageError, result.ExitCode );
 		Assert.Contains( "unknown option '--nope'", result.Output );
 	}
 
@@ -105,7 +105,7 @@ public class DeployCliTests : IDisposable
 		CommandAppResult result = Run(
 			"deploy", WriteBundle( "demo.zip" ), "--driver", "pg", "--pg-host", "db1" );
 
-		Assert.Equal( 1, result.ExitCode );
+		Assert.Equal( DeployExitCodes.UsageError, result.ExitCode );
 		Assert.Contains( "(--pg-host, --pg-database) or (--pg-connection-string)", result.Output );
 	}
 
@@ -115,7 +115,7 @@ public class DeployCliTests : IDisposable
 		CommandAppResult result = Run(
 			"deploy", WriteBundle( "demo.zip" ), "--driver", "pg", "--pg-host", "a", "--pg-host", "b" );
 
-		Assert.Equal( 1, result.ExitCode );
+		Assert.Equal( DeployExitCodes.UsageError, result.ExitCode );
 		Assert.Contains( "more than once", result.Output );
 	}
 
@@ -124,7 +124,7 @@ public class DeployCliTests : IDisposable
 	{
 		CommandAppResult result = Run( "deploy", WriteBundle( "demo.zip" ), "--driver", "oracle" );
 
-		Assert.Equal( 1, result.ExitCode );
+		Assert.Equal( DeployExitCodes.UnknownDriver, result.ExitCode );
 		Assert.Contains( "unknown database driver 'oracle'", result.Output );
 		Assert.Contains( "pg", result.Output );
 	}
@@ -137,7 +137,7 @@ public class DeployCliTests : IDisposable
 		CommandAppResult result = Run(
 			"deploy", WriteBundle( "demo.zip" ), "--driver", "pg", "--pg-host", "db1", "--pg-database", "app" );
 
-		Assert.Equal( 1, result.ExitCode );
+		Assert.Equal( DeployExitCodes.DriverCreationFailed, result.ExitCode );
 		Assert.Contains( "failed to create database driver 'pg': bad credentials", result.Output );
 	}
 
@@ -153,7 +153,7 @@ public class DeployCliTests : IDisposable
 			"deploy", WriteBundle( "demo.zip" ), "--driver", "pg", "--pg-host", "h", "--pg-database", "d",
 			"--journal", "table" );
 
-		Assert.Equal( 1, result.ExitCode );
+		Assert.Equal( DeployExitCodes.UsageError, result.ExitCode );
 
 		// rejected by the driver-parameter parser: every unrecognized option must carry the driver's
 		// own '--pg-' prefix, so a stale '--journal' is named rather than quietly ignored
@@ -170,7 +170,7 @@ public class DeployCliTests : IDisposable
 			"deploy", WriteBundle( "demo.zip" ), "--driver", "pg", "--pg-host", "h", "--pg-database", "d",
 			"--rollback", "sometimes" );
 
-		Assert.Equal( 1, result.ExitCode );
+		Assert.Equal( DeployExitCodes.UsageError, result.ExitCode );
 		Assert.Contains( "--rollback", result.Output );
 	}
 
@@ -202,14 +202,14 @@ public class DeployCliTests : IDisposable
 
 		CommandAppResult noManifest = Run( "deploy", empty, "--driver", "pg", "--pg-host", "h", "--pg-database", "d" );
 
-		Assert.Equal( 1, noManifest.ExitCode );
+		Assert.Equal( DeployExitCodes.InvalidBundle, noManifest.ExitCode );
 		Assert.Contains( "manifest.json", noManifest.Output );
 
 		string incomplete = WriteBundle( "incomplete.zip", withRollbackScripts: false );
 
 		CommandAppResult missingScript = Run( "deploy", incomplete, "--driver", "pg", "--pg-host", "h", "--pg-database", "d" );
 
-		Assert.Equal( 1, missingScript.ExitCode );
+		Assert.Equal( DeployExitCodes.InvalidBundle, missingScript.ExitCode );
 		Assert.Contains( "rollback.sql", missingScript.Output );
 		Assert.Empty( _driver.Events );
 	}
@@ -236,10 +236,12 @@ public class DeployCliTests : IDisposable
 	{
 		string bundle = WriteBundle( "demo.zip" );
 
-		Assert.Equal( 1, Run( "deploy", bundle, "--driver", "pg", "--commit-level", "bogus" ).ExitCode );
-		Assert.Equal( 1, Run( "deploy", bundle, "--driver", "pg", "--timeout", "-5" ).ExitCode );
-		Assert.Equal( 1, Run( "deploy", bundle ).ExitCode );
-		Assert.Equal( 1, Run( "deploy", bundle, "--driver", "pg", "--bundle-type", "rar" ).ExitCode );
+		int usage = DeployExitCodes.UsageError;
+
+		Assert.Equal( usage, Run( "deploy", bundle, "--driver", "pg", "--commit-level", "bogus" ).ExitCode );
+		Assert.Equal( usage, Run( "deploy", bundle, "--driver", "pg", "--timeout", "-5" ).ExitCode );
+		Assert.Equal( usage, Run( "deploy", bundle ).ExitCode );
+		Assert.Equal( usage, Run( "deploy", bundle, "--driver", "pg", "--bundle-type", "rar" ).ExitCode );
 	}
 
 	[Fact]
@@ -291,7 +293,7 @@ public class DeployCliTests : IDisposable
 
 		CommandAppResult result = Run( "deploy", bundle, "--driver", "pg", "--pg-host", "h", "--pg-database", "d" );
 
-		Assert.Equal( 1, result.ExitCode );
+		Assert.Equal( DeployExitCodes.IncompatibleBundle, result.ExitCode );
 
 		// console wrapping breaks the message across lines
 		string message = Regex.Replace( result.Output, @"\s+", " " );
@@ -312,20 +314,132 @@ public class DeployCliTests : IDisposable
 		CommandAppResult result = Run(
 			"rollback", bundle, "--driver", "pg", "--pg-host", "h", "--pg-database", "d", "--until-release", "2026.07" );
 
-		Assert.Equal( 1, result.ExitCode );
+		Assert.Equal( DeployExitCodes.NotSupported, result.ExitCode );
 		Assert.Contains( "rollback is not yet supported", result.Output );
 
 		CommandAppResult both = Run(
 			"rollback", bundle, "--driver", "pg", "--after-release", "a", "--until-release", "b" );
 
-		Assert.Equal( 1, both.ExitCode );
+		Assert.Equal( DeployExitCodes.UsageError, both.ExitCode );
 		Assert.Contains( "not both", both.Output );
 
 		CommandAppResult neither = Run( "rollback", bundle, "--driver", "pg" );
 
-		Assert.Equal( 1, neither.ExitCode );
+		Assert.Equal( DeployExitCodes.UsageError, neither.ExitCode );
 		Assert.Contains( "--after-release or --until-release", neither.Output );
 	}
+
+	[Fact]
+	public void AMissingBundleIsItsOwnFailure()
+	{
+		CommandAppResult result = Run(
+			"deploy", Path.Combine( _root, "never-built.zip" ), "--driver", "pg", "--pg-host", "h",
+			"--pg-database", "d" );
+
+		Assert.Equal( DeployExitCodes.BundleNotFound, result.ExitCode );
+		Assert.Contains( "does not exist", result.Output );
+
+		// a bundle that is not there is refused before a driver is ever created
+		Assert.Empty( _driver.Events );
+	}
+
+	/// <summary>
+	/// The three journal codes are separated because their remedies are: provisioning DDL that will
+	/// not run, a query whose result the deployment cannot read, and a write statement that fails.
+	/// </summary>
+	[Fact]
+	public void JournalingFailuresAreToldApartByTheirSlot()
+	{
+		_driver.FailingJournalingStatements.Add( FakeJournal.Marker( JournalingSlot.PrepareJournal ) );
+
+		Assert.Equal( DeployExitCodes.JournalPreparationFailed, Deploy( "prepare.zip" ).ExitCode );
+
+		_driver.FailingJournalingStatements.Clear();
+		_driver.FailingJournalingQueries.Add( FakeJournal.Marker( JournalingSlot.GetLatestRelease ) );
+
+		Assert.Equal( DeployExitCodes.JournalQueryFailed, Deploy( "query.zip" ).ExitCode );
+
+		_driver.FailingJournalingQueries.Clear();
+		_driver.FailingJournalingStatements.Add( FakeJournal.Marker( JournalingSlot.DeployingRelease ) );
+
+		Assert.Equal( DeployExitCodes.JournalWriteFailed, Deploy( "write.zip" ).ExitCode );
+	}
+
+	/// <summary>
+	/// Whether anything committed is the one thing a pipeline cannot work out from the message, and
+	/// it decides whether the run may be retried as it stands. At release commit level the first
+	/// plan's failure takes the whole release back with it; at plan level it does not.
+	/// </summary>
+	[Fact]
+	public void AFailedDeploymentSaysWhetherTheDatabaseChanged()
+	{
+		_driver.FailingScripts.Add( "create table t ()" );
+
+		CommandAppResult untouched = Deploy( "untouched.zip" );
+
+		Assert.Equal( DeployExitCodes.DeploymentFailed, untouched.ExitCode );
+		Assert.Empty( _driver.AppliedScripts );
+
+		_driver.FailingScripts.Clear();
+		_driver.FailingScripts.Add( "create index i" );
+
+		CommandAppResult partway = Deploy( "partway.zip", "--commit-level", "plan" );
+
+		Assert.Equal( DeployExitCodes.DeploymentFailedPartway, partway.ExitCode );
+		Assert.Equal( ["create table t ()"], _driver.AppliedScripts );
+	}
+
+	/// <summary>
+	/// A successful compensation puts the database back, so the run reports the plain deployment
+	/// failure rather than the partway one — the code is about what was left behind, not about how
+	/// much ran.
+	/// </summary>
+	[Fact]
+	public void RollingBackOnErrorRestoresThePlainFailureCode()
+	{
+		_driver.FailingScripts.Add( "create index i" );
+
+		CommandAppResult result = Deploy(
+			"compensated.zip", "--commit-level", "plan", "--rollback", "on-error" );
+
+		Assert.Equal( DeployExitCodes.DeploymentFailed, result.ExitCode );
+		Assert.Equal( ["create table t ()", "-- r"], _driver.AppliedScripts );
+	}
+
+	[Fact]
+	public void AFailedRollbackOutranksTheFailureThatStartedIt()
+	{
+		_driver.FailingScripts.Add( "create index i" );
+		_driver.FailingScripts.Add( "-- r" );
+
+		CommandAppResult result = Deploy(
+			"half-compensated.zip", "--commit-level", "plan", "--rollback", "on-error" );
+
+		Assert.Equal( DeployExitCodes.RollbackFailed, result.ExitCode );
+		Assert.Contains( "partially rolled back", Regex.Replace( result.Output, @"\s+", " " ) );
+	}
+
+	/// <summary>
+	/// A driver is configured without connecting, so an unreachable database is not a creation
+	/// failure and does not surface until the first transaction. The fake driver is always reachable,
+	/// so the arm is pinned here and the behaviour itself in the provider's own tests.
+	/// </summary>
+	[Fact]
+	public void AnUnreachableDatabaseIsNotADriverCreationFailure()
+	{
+		Assert.Equal(
+			DeployExitCodes.DatabaseUnreachable,
+			DeployExitCodes.For( new DatabaseConnectionException( new InvalidOperationException( "no route" ) ) ) );
+
+		Assert.Equal(
+			DeployExitCodes.DriverCreationFailed,
+			DeployExitCodes.For( new DriverCreationException( "pg", new InvalidOperationException( "bad dsn" ) ) ) );
+	}
+
+	/// <summary>Deploys the standard bundle under <paramref name="name"/> with the fake driver.</summary>
+	private CommandAppResult Deploy( string name, params string[] switches )
+		=> Run(
+			["deploy", WriteBundle( name ), "--driver", "pg", "--pg-host", "h", "--pg-database", "d", ..switches] );
 
 	private CommandAppResult Run( params string[] args )
 	{

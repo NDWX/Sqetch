@@ -13,6 +13,14 @@ public sealed class ConsoleDeploymentListener : IDeploymentListener, IDisposable
 
 	public bool UpToDate { get; private set; }
 
+	/// <summary>
+	/// Whether a transaction of this run committed and was not taken back by a compensating
+	/// rollback — the difference between a failed run a pipeline may retry blindly and one that
+	/// needs looking at first. Preparing the journal does not count: its DDL is the maintainer's
+	/// and contracted to be safe to re-run, so a run that got no further left nothing to undo.
+	/// </summary>
+	public bool DatabaseChanged { get; private set; }
+
 	public ConsoleDeploymentListener( IAnsiConsole console, string? logPath )
 	{
 		_console = console;
@@ -46,7 +54,12 @@ public sealed class ConsoleDeploymentListener : IDeploymentListener, IDisposable
 
 	public void ReleaseDeployed( string release ) => Report( $"deployed {Name( release )}" );
 
-	public void Committed() => Report( "committed" );
+	public void Committed()
+	{
+		DatabaseChanged = true;
+
+		Report( "committed" );
+	}
 
 	public void NothingToDeploy()
 	{
@@ -60,9 +73,15 @@ public sealed class ConsoleDeploymentListener : IDeploymentListener, IDisposable
 	public void RollingBackPlan( string release, string plan )
 		=> Report( $"rolling back plan '{plan}' of {Name( release )}" );
 
-	public void RolledBack() => Report( "rolled back" );
+	public void RolledBack()
+	{
+		// compensation ran to the end, so the database is as it was before the run
+		DatabaseChanged = false;
 
-	/// <summary>Logged only; the console shows the exception handler's error line.</summary>
+		Report( "rolled back" );
+	}
+
+	/// <summary>Logged only; the console line is the command's own error report.</summary>
 	public void Failed( string message ) => Log( $"failed: {message}" );
 
 	public void Dispose() => _log?.Dispose();

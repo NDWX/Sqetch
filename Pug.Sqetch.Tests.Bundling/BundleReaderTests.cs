@@ -78,9 +78,10 @@ public class BundleReaderTests
 
 		string path = Path.Combine( TestDirectory(), "absent" );
 
-		BundlingException error =
-			Assert.Throws<BundlingException>( () => registry.Create( typeName ).Open( path ) );
+		MissingBundleException error =
+			Assert.Throws<MissingBundleException>( () => registry.Create( typeName ).Open( path ) );
 
+		Assert.Equal( path, error.Path );
 		Assert.Contains( "does not exist", error.Message );
 	}
 

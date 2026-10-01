@@ -5,13 +5,13 @@ internal static class BundleInput
 	/// <summary>
 	/// Extracts an archive bundle into a fresh temporary directory using
 	/// <paramref name="extract"/> and returns a reader over it that deletes the directory
-	/// on dispose. Missing or unreadable archives surface as friendly
-	/// <see cref="BundlingException"/>s.
+	/// on dispose. A missing archive surfaces as <see cref="MissingBundleException"/> and an
+	/// unreadable one as a friendly <see cref="BundlingException"/>.
 	/// </summary>
 	public static IBundleReader ExtractToTemporary( string path, Action<string, string> extract )
 	{
 		if( !File.Exists( path ) )
-			throw new BundlingException( $"Bundle '{path}' does not exist." );
+			throw new MissingBundleException( path );
 
 		string temporary = Path.Combine( Path.GetTempPath(), "sqetch-bundle-" + Guid.NewGuid().ToString( "N" ) );
 

@@ -23,7 +23,7 @@ internal static class DriverParameters
 		foreach( IGrouping<string, string?> option in remaining.Parsed )
 		{
 			if( !option.Key.StartsWith( prefix, StringComparison.OrdinalIgnoreCase ) )
-				throw new DeploymentException(
+				throw new CommandLineException(
 					$"unknown option '{option.Key}'; driver parameters are passed as {prefix}<parameter> <value>" );
 
 			string name = option.Key[prefix.Length..];
@@ -32,30 +32,30 @@ internal static class DriverParameters
 				known.FirstOrDefault( x => string.Equals( x.Name, name, StringComparison.OrdinalIgnoreCase ) );
 
 			if( parameter is null )
-				throw new DeploymentException(
+				throw new CommandLineException(
 					$"driver '{factory.Name}' has no parameter '{name}'; available parameters: "
 					+ string.Join( ", ", known.Select( x => prefix + x.Name ) ) );
 
 			string?[] provided = option.ToArray();
 
 			if( provided.Length > 1 )
-				throw new DeploymentException( $"option '{option.Key}' is specified more than once" );
+				throw new CommandLineException( $"option '{option.Key}' is specified more than once" );
 
 			if( string.IsNullOrEmpty( provided[0] ) )
-				throw new DeploymentException( $"option '{option.Key}' requires a value" );
+				throw new CommandLineException( $"option '{option.Key}' requires a value" );
 
 			values[parameter.Name] = provided[0]!;
 		}
 
 		if( remaining.Raw.Count > 0 )
-			throw new DeploymentException(
+			throw new CommandLineException(
 				$"unexpected argument(s): {string.Join( " ", remaining.Raw )}" );
 
 		ICollection<ICollection<string>> groupings = definition.RequiredParametersOptions;
 
 		if( groupings.Count > 0
 			&& !groupings.Any( grouping => grouping.All( values.ContainsKey ) ) )
-			throw new DeploymentException(
+			throw new CommandLineException(
 				$"driver '{factory.Name}' requires "
 				+ ( groupings.Count == 1 ? "parameters " : "one of the parameter sets " )
 				+ string.Join(

@@ -55,13 +55,16 @@ public sealed class DeployCommand(
 		catch( Exception exception )
 		{
 			listener.Failed( DeployCliErrors.Describe( exception ) );
+			DeployCliErrors.Report( console, exception );
 
-			throw;
+			// reported here rather than rethrown to the central handler because only this scope knows
+			// whether anything committed, and that is half of what the exit code says
+			return DeployExitCodes.For( exception, listener.DatabaseChanged );
 		}
 
 		console.WriteLine( listener.UpToDate ? "database is up to date" : "deployment complete" );
 
-		return 0;
+		return DeployExitCodes.Success;
 	}
 
 	private IBundleType ResolveBundleType( DeploymentSettings settings )

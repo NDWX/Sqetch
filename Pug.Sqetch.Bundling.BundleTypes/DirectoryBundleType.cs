@@ -28,7 +28,7 @@ public sealed class DirectoryBundleType : IBundleType
 	public IBundleReader Open( string path )
 	{
 		if( !Directory.Exists( path ) )
-			throw new BundlingException( $"Bundle '{path}' does not exist." );
+			throw new MissingBundleException( path );
 
 		return new DirectoryBundleReader( path, deleteOnDispose: false );
 	}
