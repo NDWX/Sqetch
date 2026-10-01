@@ -32,4 +32,15 @@ public class SqliteDeploymentTests : IDisposable
 	[Fact]
 	public void AFailedPlanIsResumedFromWhatTheJournalNames()
 		=> _deployment.AFailedPlanIsResumedFromWhatTheJournalNames();
+
+	[Fact]
+	public void OnErrorUndoesWhatTheRunAlreadyCommitted() => _deployment.OnErrorUndoesWhatTheRunAlreadyCommitted();
+
+	[Fact]
+	public void OnSuccessUndoesTheWholeDeploymentInReverse()
+		=> _deployment.OnSuccessUndoesTheWholeDeploymentInReverse();
+
+	[Fact]
+	public void AFailingRollbackScriptLeavesNoHalfFinishedCompensation()
+		=> _deployment.AFailingRollbackScriptLeavesNoHalfFinishedCompensation();
 }

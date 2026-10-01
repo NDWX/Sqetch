@@ -213,6 +213,12 @@ public sealed class RecordingListener : IDeploymentListener
 	public void Committed() => Events.Add( "committed" );
 
 	public void NothingToDeploy() => Events.Add( "nothing" );
+
+	public void RollingBack( string reason ) => Events.Add( $"rolling-back {reason}" );
+
+	public void RollingBackPlan( string release, string plan ) => Events.Add( $"rollback-plan {release}/{plan}" );
+
+	public void RolledBack() => Events.Add( "rolled-back" );
 }
 
 public sealed class InMemoryBundleReader : IBundleReader

@@ -32,4 +32,16 @@ public interface IDeploymentListener
 	void Committed();
 
 	void NothingToDeploy();
+
+	/// <summary>
+	/// Fired once when a compensating rollback begins, saying why. Rollback undoes what the run
+	/// already committed, so an operator watching needs to know it started and that what follows
+	/// is undoing rather than deploying.
+	/// </summary>
+	void RollingBack( string reason );
+
+	void RollingBackPlan( string release, string plan );
+
+	/// <summary>Fired once when every deployed plan has been rolled back.</summary>
+	void RolledBack();
 }

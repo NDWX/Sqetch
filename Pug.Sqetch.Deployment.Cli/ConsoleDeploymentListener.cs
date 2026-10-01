@@ -55,6 +55,13 @@ public sealed class ConsoleDeploymentListener : IDeploymentListener, IDisposable
 		Report( "nothing to deploy" );
 	}
 
+	public void RollingBack( string reason ) => Report( $"rolling back: {reason}" );
+
+	public void RollingBackPlan( string release, string plan )
+		=> Report( $"rolling back plan '{plan}' of {Name( release )}" );
+
+	public void RolledBack() => Report( "rolled back" );
+
 	/// <summary>Logged only; the console shows the exception handler's error line.</summary>
 	public void Failed( string message ) => Log( $"failed: {message}" );
 

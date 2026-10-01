@@ -50,4 +50,15 @@ public class PostgreSqlDeploymentTests : IClassFixture<PostgresDatabase>
 	[DockerFact]
 	public void AFailedPlanIsResumedFromWhatTheJournalNames()
 		=> _deployment.Value.AFailedPlanIsResumedFromWhatTheJournalNames();
+
+	[DockerFact]
+	public void OnErrorUndoesWhatTheRunAlreadyCommitted() => _deployment.Value.OnErrorUndoesWhatTheRunAlreadyCommitted();
+
+	[DockerFact]
+	public void OnSuccessUndoesTheWholeDeploymentInReverse()
+		=> _deployment.Value.OnSuccessUndoesTheWholeDeploymentInReverse();
+
+	[DockerFact]
+	public void AFailingRollbackScriptLeavesNoHalfFinishedCompensation()
+		=> _deployment.Value.AFailingRollbackScriptLeavesNoHalfFinishedCompensation();
 }

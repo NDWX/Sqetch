@@ -38,7 +38,8 @@ public class DeploymentEngine(
 	IBundleReader reader,
 	IBundleLayout layout,
 	DeploymentCommitLevel commitLevel,
-	IDeploymentListener listener )
+	IDeploymentListener listener,
+	DeploymentRollbackMode rollback = DeploymentRollbackMode.None )
 {
 	public void Deploy( BundleManifest manifest )
 	{
@@ -153,6 +154,15 @@ public class DeploymentEngine(
 		IDatabaseTransaction? transaction = null;
 		bool deployedAnything = false;
 
+		// what this run has put beyond reach of a transaction rollback, newest first, so a
+		// compensating rollback is a pop: undoing is last-in-first-out by nature, and nesting the
+		// plans inside their release makes a release's boundaries structural rather than something
+		// rollback has to re-derive by comparing neighbours.
+		// A plan moves from pending to committed only when its transaction commits: anything still
+		// pending when a transaction rolls back never reached the database and needs no compensation.
+		Stack<CommittedRelease> committed = new ();
+		List<(ReleaseGroup Release, BundleManifestPlan Plan)> pending = new ();
+
 		IDatabaseTransaction Transaction() => transaction ??= driver.BeginTransaction();
 
 		void CommitBoundary()
@@ -164,6 +174,24 @@ public class DeploymentEngine(
 			listener.Committed();
 
 			transaction = null;
+
+			// a transaction never spans releases — each release's deployment ends by committing —
+			// so these plans all belong to one release, and at most one frame is opened here
+			foreach( (ReleaseGroup release, BundleManifestPlan plan) in pending )
+			{
+				CommittedRelease? top = committed.Count > 0 ? committed.Peek() : null;
+
+				if( top is null || !string.Equals( top.Name, release.Name, StringComparison.Ordinal ) )
+				{
+					top = new CommittedRelease( release.Name, new Stack<BundleManifestPlan>() );
+
+					committed.Push( top );
+				}
+
+				top.Plans.Push( plan );
+			}
+
+			pending.Clear();
 		}
 		
 		bool firstGroupFound = false, 
@@ -279,7 +307,6 @@ public class DeploymentEngine(
 			return;
 		}
 
-		Stack<(ReleaseGroup release, Stack<string> deployedPlans)> deployedGroups = new();
 		void Deploy(ReleaseGroup release, IEnumerable<string> plansToSkip)
 		{
 			if (latestJournaledRelease is null || !string.Equals(latestJournaledRelease.Name, release.Name))
@@ -303,6 +330,7 @@ public class DeploymentEngine(
 					}
 
 					DeployPlan(release.Name, plan, journal, Transaction, listener);
+					pending.Add( (release, plan) );
 
 					if (commitLevel == DeploymentCommitLevel.Plan && index < release.Plans.Count - 1)
 						CommitBoundary();
@@ -314,6 +342,7 @@ public class DeploymentEngine(
 				{
 					BundleManifestPlan plan = release.Plans[index];
 					DeployPlan(release.Name, plan, journal, Transaction, listener);
+					pending.Add( (release, plan) );
 
 					if (commitLevel == DeploymentCommitLevel.Plan && index < release.Plans.Count - 1)
 						CommitBoundary();
@@ -333,12 +362,104 @@ public class DeploymentEngine(
 				Deploy(release, plansToSkip);
 			}
 		}
-		catch (Exception e)
+		catch( Exception exception )
 		{
 			transaction?.Rollback();
-			
+
+			// the open transaction took its own plans back; only what committed needs compensating
+			pending.Clear();
+
+			if( rollback == DeploymentRollbackMode.OnError && committed.Count > 0 )
+				RollBack( journal, committed, $"deployment failed: {exception.Message}" );
+
 			throw;
 		}
+
+		if( rollback == DeploymentRollbackMode.OnSuccess && committed.Count > 0 )
+			RollBack( journal, committed, "deployment succeeded; rolling back as requested" );
+	}
+
+	/// <summary>
+	/// Undoes what <paramref name="committed"/> holds, popping it: releases newest first, each
+	/// release's plans newest first, and each plan's steps in reverse. Running each step's rollback
+	/// script and journaling through the RollingBack/RolledBack slots. This is a compensating pass,
+	/// not a transaction rollback — by the time it runs the work is committed, which is why it is
+	/// the only way to undo a deployment that committed at plan boundaries.
+	///
+	/// It consumes the record as it goes, so whatever remains on failure is exactly what was not
+	/// compensated.
+	/// </summary>
+	private void RollBack( StatementJournal journal, Stack<CommittedRelease> committed, string reason )
+	{
+		listener.RollingBack( reason );
+
+		IDatabaseTransaction? transaction = null;
+
+		IDatabaseTransaction Transaction() => transaction ??= driver.BeginTransaction();
+
+		void CommitBoundary()
+		{
+			if( transaction is null )
+				return;
+
+			transaction.Commit();
+
+			transaction = null;
+		}
+
+		try
+		{
+			while( committed.Count > 0 )
+			{
+				CommittedRelease release = committed.Pop();
+
+				journal.RollingBackRelease( release.Name, Transaction() );
+
+				while( release.Plans.Count > 0 )
+				{
+					BundleManifestPlan plan = release.Plans.Pop();
+
+					listener.RollingBackPlan( release.Name, plan.Name );
+					journal.RollingBackPlan( release.Name, plan.Name, Transaction() );
+
+					// the steps are the bundle's own data, not this run's state, so they are
+					// traversed backwards rather than consumed
+					foreach( BundleManifestStep step in plan.Steps.Reverse() )
+					{
+						journal.RollingBackStep( release.Name, plan.Name, step.Name, Transaction() );
+
+						try
+						{
+							Transaction().ExecuteStepScript(
+								ReadScript( plan.Name, step.Name, StepScriptKind.Rollback ) );
+						}
+						catch( Exception exception )
+						{
+							throw new RollbackFailedException( release.Name, plan.Name, step.Name, exception );
+						}
+
+						journal.RolledBackStep( release.Name, plan.Name, step.Name, Transaction() );
+					}
+
+					journal.RolledBackPlan( release.Name, plan.Name, Transaction() );
+
+					if( release.Plans.Count > 0 && commitLevel == DeploymentCommitLevel.Plan )
+						CommitBoundary();
+				}
+
+				journal.RolledBackRelease( release.Name, Transaction() );
+
+				CommitBoundary();
+			}
+		}
+		catch
+		{
+			transaction?.Rollback();
+
+			throw;
+		}
+
+		listener.RolledBack();
 	}
 
 	private static void EnsureDeployedPlansAreInBundleRelease(JournaledRelease? journaledRelease,
@@ -375,7 +496,7 @@ public class DeploymentEngine(
 			listener.DeployingStep( release, plan.Name, step.Name );
 			journal.DeployingStep( release, plan.Name, step.Name, step.Description, transaction() );
 
-			string script = ReadDeployScript( plan.Name, step.Name );
+			string script = ReadScript( plan.Name, step.Name, StepScriptKind.Deploy );
 
 			try
 			{
@@ -394,9 +515,9 @@ public class DeploymentEngine(
 		listener.PlanDeployed( release, plan.Name );
 	}
 
-	private string ReadDeployScript( string plan, string step )
+	private string ReadScript( string plan, string step, StepScriptKind kind )
 	{
-		using Stream entry = reader.Open( layout.ScriptPath( plan, step, StepScriptKind.Deploy ) );
+		using Stream entry = reader.Open( layout.ScriptPath( plan, step, kind ) );
 		using StreamReader content = new ( entry );
 
 		return content.ReadToEnd();
@@ -452,6 +573,13 @@ public class DeploymentEngine(
 
 		return groups;
 	}
+
+	/// <summary>
+	/// A release this run committed plans of, and those plans newest first. Only the name is kept:
+	/// rollback journals by name, and holding the whole group would tie the record to bundle data it
+	/// no longer needs.
+	/// </summary>
+	private sealed record CommittedRelease( string Name, Stack<BundleManifestPlan> Plans );
 
 	private sealed record ReleaseGroup(
 		string Name,
