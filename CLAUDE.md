@@ -79,10 +79,15 @@ dotnet run --project Pug.Sqetch.Deployment.Cli -- <args>   # run the 'sqetch-dep
   that is the **only** parsing Sqetch does to the SQL, so a `$$ … $$` body containing a bare `;;`
   alone on a line would split wrongly. Query slots hold exactly one statement. Parameters are
   supplied by name without a provider prefix (`@project` on every slot, plus `@release`, `@plan`,
-  `@step`, `@description` as the slot carries them — see `JournalingSlots.ParameterNames`); binding
-  is the driver's job and Sqetch never scans SQL for placeholders. Deliberately absent: a timestamp
-  (`now()` evaluates server-side, so a skewed deployment host cannot disorder the journal) and an
-  actor (`current_user`). `bundle` refuses until all fifteen are set, naming every missing one;
+  `@step`, `@description` as the slot carries them, and `@utcTimestamp` last on every *writing* slot
+  — see `JournalingSlots.ParameterNames`/`Writes`); binding is the driver's job and Sqetch never
+  scans SQL for placeholders, so a statement that names none of them is fine. `@utcTimestamp` is the
+  deployment host's clock, bound as a `DateTime` with `DateTimeKind.Utc` rather than text (no
+  provider implicitly casts text to a timestamp column) and read **once per journaled event**, not
+  per statement. It exists for the engine that cannot supply the instant itself; a maintainer whose
+  engine can is better served by `now()`, which no skewed host clock can disorder. Deliberately
+  absent: an actor (`current_user`). Queries and `PrepareJournal` get no timestamp — one filters on
+  identity, the other is DDL that records no event. `bundle` refuses until all fifteen are set, naming every missing one;
   rollback slots are required even though rollback deployment is not implemented.
   CLI: `sqetch journaling list [--statements] [-o <FORMAT>]`, `parameters [<slot>] [-o <FORMAT>]`
   (answers from the contract alone, so it needs no project), `print <slot>` (verbatim, no markup,

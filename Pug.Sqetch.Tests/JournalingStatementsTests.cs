@@ -149,16 +149,48 @@ public class JournalingStatementsTests
 	public void ParametersNarrowToTheUnitTheSlotNames()
 	{
 		Assert.Equal(
-			["project", "release", "description"],
+			["project", "release", "description", "utcTimestamp"],
 			JournalingSlots.ParameterNames( JournalingSlot.ReleaseDeployed ) );
 
 		Assert.Equal(
-			["project", "release", "plan", "description"],
+			["project", "release", "plan", "description", "utcTimestamp"],
 			JournalingSlots.ParameterNames( JournalingSlot.PlanDeployed ) );
 
 		Assert.Equal(
-			["project", "release", "plan", "step", "description"],
+			["project", "release", "plan", "step", "description", "utcTimestamp"],
 			JournalingSlots.ParameterNames( JournalingSlot.StepDeployed ) );
+	}
+
+	/// <summary>
+	/// Only the slots that record an event get the host's clock: a query filters on identity alone,
+	/// and prepare is DDL that records nothing. It comes last so adding it did not move any
+	/// parameter a positional-placeholder driver had already bound.
+	/// </summary>
+	[Fact]
+	public void EveryWritingSlotIsGivenTheUtcTimestampLastAndNoOtherSlotIsGivenItAtAll()
+		=> Assert.All(
+			JournalingSlots.All,
+			slot =>
+			{
+				IReadOnlyList<string> names = JournalingSlots.ParameterNames( slot );
+
+				if( JournalingSlots.Writes( slot ) )
+					Assert.Equal( JournalingSlots.Parameters.UtcTimestamp, names[^1] );
+				else
+					Assert.DoesNotContain( JournalingSlots.Parameters.UtcTimestamp, names );
+			} );
+
+	[Fact]
+	public void TheQueriesAndPrepareAreNotWritingSlots()
+	{
+		Assert.False( JournalingSlots.Writes( JournalingSlot.GetLatestRelease ) );
+		Assert.False( JournalingSlots.Writes( JournalingSlot.GetDeployedPlans ) );
+		Assert.False( JournalingSlots.Writes( JournalingSlot.PrepareJournal ) );
+
+		Assert.All(
+			JournalingSlots.All.Where(
+				slot => !JournalingSlots.IsQuery( slot ) && slot != JournalingSlot.PrepareJournal ),
+			slot => Assert.True( JournalingSlots.Writes( slot ) ) );
 	}
 
 	/// <summary>

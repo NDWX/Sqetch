@@ -243,7 +243,7 @@ public class JournalingCliTests : IDisposable
 
 		Assert.Equal( "PlanDeployed", row.GetProperty( "slot" ).GetString() );
 		Assert.Equal(
-			["@project", "@release", "@plan", "@description"],
+			["@project", "@release", "@plan", "@description", "@utcTimestamp"],
 			row.GetProperty( "parameters" ).EnumerateArray().Select( x => x.GetString() ).ToArray() );
 	}
 

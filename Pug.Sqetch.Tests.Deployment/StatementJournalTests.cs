@@ -15,6 +15,9 @@ public class StatementJournalTests
 {
 	private const string Project = "proj";
 
+	/// <summary>A fixed clock, so the 'utcTimestamp' parameter can be asserted exactly.</summary>
+	private static readonly DateTime Instant = new ( 2026, 10, 1, 12, 34, 56, 789, DateTimeKind.Utc );
+
 	[Fact]
 	public void EveryEventAndPrepareSlotIsCalledWithExactlyItsParameters()
 	{
@@ -23,60 +26,124 @@ public class StatementJournalTests
 		journal.DeployingRelease( "r1", "d1", transaction );
 		AssertCall(
 			transaction, 0, "-- DeployingRelease",
-			( "project", Project ), ( "release", "r1" ), ( "description", "d1" ) );
+			( "project", Project ), ( "release", "r1" ), ( "description", "d1" ), ( "utcTimestamp", Instant ) );
 
 		journal.DeployingPlan( "r1", "p1", "d2", transaction );
 		AssertCall(
 			transaction, 1, "-- DeployingPlan",
-			( "project", Project ), ( "release", "r1" ), ( "plan", "p1" ), ( "description", "d2" ) );
+			( "project", Project ), ( "release", "r1" ), ( "plan", "p1" ), ( "description", "d2" ),
+			( "utcTimestamp", Instant ) );
 
 		journal.DeployingStep( "r1", "p1", "s1", "d3", transaction );
 		AssertCall(
 			transaction, 2, "-- DeployingStep",
-			( "project", Project ), ( "release", "r1" ), ( "plan", "p1" ), ( "step", "s1" ), ( "description", "d3" ) );
+			( "project", Project ), ( "release", "r1" ), ( "plan", "p1" ), ( "step", "s1" ), ( "description", "d3" ),
+			( "utcTimestamp", Instant ) );
 
 		journal.StepDeployed( "r1", "p1", "s1", "d4", transaction );
 		AssertCall(
 			transaction, 3, "-- StepDeployed",
-			( "project", Project ), ( "release", "r1" ), ( "plan", "p1" ), ( "step", "s1" ), ( "description", "d4" ) );
+			( "project", Project ), ( "release", "r1" ), ( "plan", "p1" ), ( "step", "s1" ), ( "description", "d4" ),
+			( "utcTimestamp", Instant ) );
 
 		journal.PlanDeployed( "r1", "p1", "d5", transaction );
 		AssertCall(
 			transaction, 4, "-- PlanDeployed",
-			( "project", Project ), ( "release", "r1" ), ( "plan", "p1" ), ( "description", "d5" ) );
+			( "project", Project ), ( "release", "r1" ), ( "plan", "p1" ), ( "description", "d5" ),
+			( "utcTimestamp", Instant ) );
 
 		journal.ReleaseDeployed( "r1", "d6", transaction );
 		AssertCall(
-			transaction, 5, "-- ReleaseDeployed", ( "project", Project ), ( "release", "r1" ), ( "description", "d6" ) );
+			transaction, 5, "-- ReleaseDeployed", ( "project", Project ), ( "release", "r1" ),
+			( "description", "d6" ), ( "utcTimestamp", Instant ) );
 
 		journal.RollingBackRelease( "r1", transaction );
-		AssertCall( transaction, 6, "-- RollingBackRelease", ( "project", Project ), ( "release", "r1" ) );
+		AssertCall(
+			transaction, 6, "-- RollingBackRelease", ( "project", Project ), ( "release", "r1" ),
+			( "utcTimestamp", Instant ) );
 
 		journal.RollingBackPlan( "r1", "p1", transaction );
 		AssertCall(
-			transaction, 7, "-- RollingBackPlan", ( "project", Project ), ( "release", "r1" ), ( "plan", "p1" ) );
+			transaction, 7, "-- RollingBackPlan", ( "project", Project ), ( "release", "r1" ), ( "plan", "p1" ),
+			( "utcTimestamp", Instant ) );
 
 		journal.RollingBackStep( "r1", "p1", "s1", transaction );
 		AssertCall(
 			transaction, 8, "-- RollingBackStep",
-			( "project", Project ), ( "release", "r1" ), ( "plan", "p1" ), ( "step", "s1" ) );
+			( "project", Project ), ( "release", "r1" ), ( "plan", "p1" ), ( "step", "s1" ),
+			( "utcTimestamp", Instant ) );
 
 		journal.RolledBackStep( "r1", "p1", "s1", transaction );
 		AssertCall(
 			transaction, 9, "-- RolledBackStep",
-			( "project", Project ), ( "release", "r1" ), ( "plan", "p1" ), ( "step", "s1" ) );
+			( "project", Project ), ( "release", "r1" ), ( "plan", "p1" ), ( "step", "s1" ),
+			( "utcTimestamp", Instant ) );
 
 		journal.RolledBackPlan( "r1", "p1", transaction );
 		AssertCall(
-			transaction, 10, "-- RolledBackPlan", ( "project", Project ), ( "release", "r1" ), ( "plan", "p1" ) );
+			transaction, 10, "-- RolledBackPlan", ( "project", Project ), ( "release", "r1" ), ( "plan", "p1" ),
+			( "utcTimestamp", Instant ) );
 
 		journal.RolledBackRelease( "r1", transaction );
-		AssertCall( transaction, 11, "-- RolledBackRelease", ( "project", Project ), ( "release", "r1" ) );
+		AssertCall(
+			transaction, 11, "-- RolledBackRelease", ( "project", Project ), ( "release", "r1" ),
+			( "utcTimestamp", Instant ) );
 
 		journal.PrepareJournal( transaction );
 		AssertCall( transaction, 12, "-- PrepareJournal", ( "project", Project ) );
 
 		Assert.Equal( 13, transaction.JournalingCalls.Count );
+	}
+
+	/// <summary>
+	/// A slot may hold several statements; they record one event, so they are given one instant
+	/// rather than each reading the clock again.
+	/// </summary>
+	[Fact]
+	public void TheClockIsReadOncePerEventNotOncePerStatement()
+	{
+		Dictionary<JournalingSlot, string?> text = Complete();
+		text[JournalingSlot.DeployingPlan] = "first\n;;\nsecond\n;;\nthird";
+
+		int reads = 0;
+		FakeDatabaseDriver driver = new ();
+		FakeTransaction transaction = new ( driver, 1 );
+		StatementJournal journal = new (
+			new JournalingStatements( text ), Project, () => Instant.AddSeconds( reads++ ) );
+
+		journal.DeployingPlan( "r1", "p1", "d1", transaction );
+
+		Assert.Equal( 1, reads );
+		Assert.Equal( 3, transaction.JournalingCalls.Count );
+		Assert.All(
+			transaction.JournalingCalls,
+			call => Assert.Equal(
+				Instant, Assert.Single( call.Parameters, parameter => parameter.Name == "utcTimestamp" ).Value ) );
+	}
+
+	/// <summary>
+	/// A driver binding an unspecified-kind <see cref="DateTime"/> may convert it as local time, so
+	/// the kind is forced rather than trusted — the parameter's whole contract is that it is UTC.
+	/// </summary>
+	[Theory]
+	[InlineData( DateTimeKind.Unspecified )]
+	[InlineData( DateTimeKind.Local )]
+	public void AClockReadingThatIsNotAlreadyUtcIsBoundAsUtc( DateTimeKind kind )
+	{
+		DateTime reading = DateTime.SpecifyKind( Instant, kind );
+
+		FakeDatabaseDriver driver = new ();
+		FakeTransaction transaction = new ( driver, 1 );
+		StatementJournal journal = new ( new JournalingStatements( Complete() ), Project, () => reading );
+
+		journal.ReleaseDeployed( "r1", "d1", transaction );
+
+		DateTime bound = Assert.IsType<DateTime>(
+			Assert.Single(
+				transaction.JournalingCalls[0].Parameters, parameter => parameter.Name == "utcTimestamp" ).Value );
+
+		Assert.Equal( DateTimeKind.Utc, bound.Kind );
+		Assert.Equal( kind == DateTimeKind.Local ? reading.ToUniversalTime() : Instant, bound );
 	}
 
 	[Fact]
@@ -117,7 +184,8 @@ public class StatementJournalTests
 			call => Assert.Equal(
 				new JournalingParameter[]
 				{
-					new ( "project", Project ), new ( "release", "r1" ), new ( "description", "d1" )
+					new ( "project", Project ), new ( "release", "r1" ), new ( "description", "d1" ),
+					new ( "utcTimestamp", Instant )
 				},
 				call.Parameters ) );
 	}
@@ -382,13 +450,13 @@ public class StatementJournalTests
 	{
 		FakeDatabaseDriver driver = new ();
 		FakeTransaction transaction = new ( driver, 1 );
-		StatementJournal journal = new ( new JournalingStatements( text ?? Complete() ), Project );
+		StatementJournal journal = new ( new JournalingStatements( text ?? Complete() ), Project, () => Instant );
 
 		return (transaction, journal);
 	}
 
 	private static void AssertCall(
-		FakeTransaction transaction, int index, string statement, params (string Name, string Value)[] expected )
+		FakeTransaction transaction, int index, string statement, params (string Name, object Value)[] expected )
 	{
 		(string Statement, IReadOnlyList<JournalingParameter> Parameters) call = transaction.JournalingCalls[index];
 

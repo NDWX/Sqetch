@@ -143,8 +143,17 @@ public sealed class FakeTransaction( FakeDatabaseDriver driver, int number ) : I
 		return reader;
 	}
 
+	/// <summary>
+	/// The event line's parameter list. A <see cref="DateTime"/> renders as its kind rather than its
+	/// value — the instant is whatever the clock said, so no sequence assertion could spell it out —
+	/// which still pins that the parameter arrived as a UTC <see cref="DateTime"/> and not as text.
+	/// <c>StatementJournalTests</c> asserts the instant itself, against a fixed clock.
+	/// </summary>
 	private static string Format( IReadOnlyList<JournalingParameter> parameters )
-		=> string.Join( ", ", parameters.Select( p => $"{p.Name}={p.Value}" ) );
+		=> string.Join(
+			", ",
+			parameters.Select(
+				p => $"{p.Name}={( p.Value is DateTime time ? $"<{time.Kind.ToString().ToLowerInvariant()}>" : p.Value )}" ) );
 
 	public void Rollback()
 	{
@@ -296,7 +305,7 @@ public sealed class FakeJournal
 			return;
 
 		string Value( string name )
-			=> parameters.SingleOrDefault( parameter => parameter.Name == name ).Value ?? "";
+			=> parameters.SingleOrDefault( parameter => parameter.Name == name ).Value?.ToString() ?? "";
 
 		string release = Value( JournalingSlots.Parameters.Release );
 		string plan = Value( JournalingSlots.Parameters.Plan );

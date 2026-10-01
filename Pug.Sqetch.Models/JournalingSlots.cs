@@ -19,6 +19,16 @@ public static class JournalingSlots
 		public const string Step = "step";
 
 		public const string Description = "description";
+
+		/// <summary>
+		/// When the deployment host observed the event, in UTC. For the maintainer whose engine
+		/// cannot supply the instant itself — no usable 'now()', no column default, or a session
+		/// time zone nobody can pin down — rather than as the preferred source: a server-side
+		/// 'now()' cannot be disordered by a skewed deployment host. Bound as a
+		/// <see cref="DateTime"/> with <see cref="DateTimeKind.Utc"/>, not as text, so the driver
+		/// binds a timestamp and no statement has to cast or parse one.
+		/// </summary>
+		public const string UtcTimestamp = "utcTimestamp";
 	}
 
 	/// <summary>Every slot, in declaration order.</summary>
@@ -42,11 +52,23 @@ public static class JournalingSlots
 		=> IsQuery( slot ) || slot == JournalingSlot.PrepareJournal ? $"{slot}.sql" : $"On{slot}.sql";
 
 	/// <summary>
+	/// The slots that record something in the journal, as opposed to reading it
+	/// (<see cref="IsQuery"/>) or migrating its schema (<see cref="JournalingSlot.PrepareJournal"/>).
+	/// Only these are given <see cref="Parameters.UtcTimestamp"/>: a query filters on identity alone,
+	/// and prepare is DDL that records no event.
+	/// </summary>
+	public static bool Writes( JournalingSlot slot )
+		=> !IsQuery( slot ) && slot != JournalingSlot.PrepareJournal;
+
+	/// <summary>
 	/// The parameters supplied to the slot's statements. Every slot gets
 	/// <see cref="Parameters.Project"/>: the SQL is frozen into the bundle, so a journal shared by
-	/// two projects could not otherwise tell them apart. There is deliberately no timestamp —
-	/// 'now()' evaluates server-side, so a clock-skewed deployment host cannot disorder the journal —
-	/// and no actor; the maintainer uses 'current_user'.
+	/// two projects could not otherwise tell them apart. Every writing slot also gets
+	/// <see cref="Parameters.UtcTimestamp"/>, last, for the engine that cannot supply the instant
+	/// itself; a maintainer whose engine can is better served by 'now()', which no host clock can
+	/// skew. Unused parameters are the normal case — a statement binds what it names — so carrying it
+	/// on every writing slot costs nothing. There is deliberately no actor parameter; the maintainer
+	/// uses 'current_user'.
 	/// </summary>
 	public static IReadOnlyList<string> ParameterNames( JournalingSlot slot )
 		=> slot switch
@@ -54,26 +76,34 @@ public static class JournalingSlots
 			JournalingSlot.PrepareJournal or JournalingSlot.GetLatestRelease =>
 				[Parameters.Project],
 
-			JournalingSlot.GetDeployedPlans or JournalingSlot.RollingBackRelease
-				or JournalingSlot.RolledBackRelease =>
+			JournalingSlot.GetDeployedPlans =>
 				[Parameters.Project, Parameters.Release],
 
+			JournalingSlot.RollingBackRelease or JournalingSlot.RolledBackRelease =>
+				[Parameters.Project, Parameters.Release, Parameters.UtcTimestamp],
+
 			JournalingSlot.RollingBackPlan or JournalingSlot.RolledBackPlan =>
-				[Parameters.Project, Parameters.Release, Parameters.Plan],
+				[Parameters.Project, Parameters.Release, Parameters.Plan, Parameters.UtcTimestamp],
 
 			JournalingSlot.RollingBackStep or JournalingSlot.RolledBackStep =>
-				[Parameters.Project, Parameters.Release, Parameters.Plan, Parameters.Step],
+			[
+				Parameters.Project, Parameters.Release, Parameters.Plan, Parameters.Step,
+				Parameters.UtcTimestamp
+			],
 
 			JournalingSlot.DeployingRelease or JournalingSlot.ReleaseDeployed =>
-				[Parameters.Project, Parameters.Release, Parameters.Description],
+				[Parameters.Project, Parameters.Release, Parameters.Description, Parameters.UtcTimestamp],
 
 			JournalingSlot.DeployingPlan or JournalingSlot.PlanDeployed =>
-				[Parameters.Project, Parameters.Release, Parameters.Plan, Parameters.Description],
+			[
+				Parameters.Project, Parameters.Release, Parameters.Plan, Parameters.Description,
+				Parameters.UtcTimestamp
+			],
 
 			JournalingSlot.DeployingStep or JournalingSlot.StepDeployed =>
 			[
 				Parameters.Project, Parameters.Release, Parameters.Plan, Parameters.Step,
-				Parameters.Description
+				Parameters.Description, Parameters.UtcTimestamp
 			],
 
 			_ => throw new ArgumentOutOfRangeException( nameof(slot), slot, "Unknown journaling slot." )

@@ -21,13 +21,21 @@ public sealed class StatementJournal
 
 	private readonly string _project;
 
-	public StatementJournal( JournalingStatements statements, string project )
+	private readonly Func<DateTime> _utcNow;
+
+	/// <param name="utcNow">
+	/// The clock behind the 'utcTimestamp' parameter, defaulting to <see cref="DateTime.UtcNow"/>.
+	/// Injectable so the parameter contracts can be asserted against a fixed instant rather than
+	/// whatever the test machine's clock said.
+	/// </param>
+	public StatementJournal( JournalingStatements statements, string project, Func<DateTime>? utcNow = null )
 	{
 		ArgumentNullException.ThrowIfNull( statements );
 		ArgumentNullException.ThrowIfNull( project );
 
 		_statements = statements;
 		_project = project;
+		_utcNow = utcNow ?? ( () => DateTime.UtcNow );
 	}
 
 	/// <summary>
@@ -223,6 +231,9 @@ public sealed class StatementJournal
 	/// <see cref="JournalingSlots.ParameterNames"/> lists for that slot — <c>@project</c> is always
 	/// bound, the rest only when the slot's contract names them, so a caller never supplies a
 	/// parameter the slot does not list.
+	///
+	/// The clock is read once per journaled event, not once per statement, so a slot holding several
+	/// statements records one instant rather than a spread of them.
 	/// </summary>
 	private JournalingParameter[] Parameters(
 		JournalingSlot slot, string? release = null, string? plan = null, string? step = null,
@@ -230,15 +241,34 @@ public sealed class StatementJournal
 	{
 		IReadOnlyList<string> names = JournalingSlots.ParameterNames( slot );
 		JournalingParameter[] parameters = new JournalingParameter[names.Count];
+		DateTime utcNow = names.Contains( JournalingSlots.Parameters.UtcTimestamp ) ? UtcNow() : default;
 
 		for( int index = 0; index < names.Count; index++ )
 			parameters[index] = new JournalingParameter(
-				names[index], Value( names[index], release, plan, step, description ) );
+				names[index], Value( names[index], release, plan, step, description, utcNow ) );
 
 		return parameters;
 	}
 
-	private string Value( string name, string? release, string? plan, string? step, string? description )
+	/// <summary>
+	/// The clock's reading, forced to <see cref="DateTimeKind.Utc"/> — a driver binding an
+	/// unspecified-kind <see cref="DateTime"/> may convert it as local time, and the parameter's whole
+	/// contract is that it is UTC.
+	/// </summary>
+	private DateTime UtcNow()
+	{
+		DateTime now = _utcNow();
+
+		return now.Kind switch
+		{
+			DateTimeKind.Utc => now,
+			DateTimeKind.Local => now.ToUniversalTime(),
+			_ => DateTime.SpecifyKind( now, DateTimeKind.Utc )
+		};
+	}
+
+	private object Value(
+		string name, string? release, string? plan, string? step, string? description, DateTime utcNow )
 		=> name switch
 		{
 			JournalingSlots.Parameters.Project => _project,
@@ -246,6 +276,7 @@ public sealed class StatementJournal
 			JournalingSlots.Parameters.Plan => plan!,
 			JournalingSlots.Parameters.Step => step!,
 			JournalingSlots.Parameters.Description => description!,
+			JournalingSlots.Parameters.UtcTimestamp => utcNow,
 			_ => throw new ArgumentOutOfRangeException( nameof(name), name, "Unknown journaling parameter." )
 		};
 
