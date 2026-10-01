@@ -63,7 +63,9 @@ public class DeployCliTests : IDisposable
 			["script #3 create table t ()", "script #3 create index i"],
 			_driver.Events.Where( x => x.StartsWith( "script" ) ) );
 		Assert.Equal( ["ReleaseDeployed 2026.07"], _driver.Transactions[2].Journaled.Where( x => x.StartsWith( "ReleaseDeployed" ) ) );
-		Assert.Equal( "commit #3", _driver.Events.Last() );
+		// the driver owns the connection, so the command releases it once — after the last commit
+		Assert.Equal( ["commit #3", "dispose"], _driver.Events.TakeLast( 2 ) );
+		Assert.True( _driver.Disposed );
 	}
 
 	[Fact]

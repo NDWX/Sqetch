@@ -39,6 +39,10 @@ public sealed class DeployCommand(
 			throw new DriverCreationException( factory.Name, exception );
 		}
 
+		// the driver owns the connection it opened, and this command is the only thing that knows
+		// the deployment is over — including the failure paths below, which still rethrow
+		using IDatabaseDriver owned = driver;
+
 		using ConsoleDeploymentListener listener = new ( console, settings.Log );
 
 		try

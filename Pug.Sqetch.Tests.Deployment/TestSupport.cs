@@ -59,6 +59,9 @@ public sealed class FakeDatabaseDriver : IDatabaseDriver
 	/// </summary>
 	public FakeJournal? Journal { get; set; }
 
+	/// <summary>Whether the host released the driver, as a real one's connection would need.</summary>
+	public bool Disposed { get; private set; }
+
 	public IDatabaseTransaction BeginTransaction()
 	{
 		FakeTransaction transaction = new ( this, Transactions.Count + 1 );
@@ -67,6 +70,13 @@ public sealed class FakeDatabaseDriver : IDatabaseDriver
 		Events.Add( $"begin #{transaction.Number}" );
 
 		return transaction;
+	}
+
+	public void Dispose()
+	{
+		Disposed = true;
+
+		Events.Add( "dispose" );
 	}
 }
 

@@ -16,6 +16,7 @@ dotnet build                 # full solution
 dotnet test                  # all test projects; must be green before any commit
 dotnet run --project Pug.Sqetch.Cli -- <args>   # run the 'sqetch' CLI
 dotnet run --project Pug.Sqetch.Deployment.Cli -- <args>   # run the 'sqetch-deploy' CLI
+dotnet run --project Pug.Sqetch.Deployment.Cli -- deploy <bundle> --driver sqlite --sqlite-file db
 ```
 
 ## Solution layout
@@ -34,6 +35,9 @@ dotnet run --project Pug.Sqetch.Deployment.Cli -- <args>   # run the 'sqetch-dep
 | `Pug.Sqetch.Cli` | Spectre.Console.Cli command tree (`SqetchApp.Configure`), the only layer touching `ProjectPaths` for output |
 | `Pug.Sqetch.Deployment.Abstractions` (net8.0) | Deployment contracts (ns `…Deployment.DatabaseDriver.Abstractions`): `IDatabaseDriverFactory`/`IDatabaseDriver`/`IDatabaseTransaction`, `JournalingParameter`, `JournaledRelease`, registry interface, deployment exceptions |
 | `Pug.Sqetch.Deployment` (net8.0) | `DeploymentEngine` (deploy flow), `StatementJournal`, `BundleValidator`/`ValidatedBundle`, driver registry, `IDeploymentListener` |
+| `Pug.Sqetch.Deployment.DatabaseDrivers.Ado` (net8.0) | `AdoDatabaseDriver`/`AdoDatabaseTransaction`/`AdoDialect`: the ADO.NET half every provider driver inherits |
+| `Pug.Sqetch.Deployment.DatabaseDrivers.Sqlite` | `SqliteDatabaseDriverFactory` (Microsoft.Data.Sqlite) + `RegisterSqliteDriver()` |
+| `Pug.Sqetch.Deployment.DatabaseDrivers.PostgreSql` | `PostgreSqlDatabaseDriverFactory` (Npgsql) + `RegisterPostgreSqlDriver()` |
 | `Pug.Sqetch.Deployment.Cli` | The 'sqetch-deploy' command tree (`SqetchDeployApp`), `TypeRegistrar` DI seam, dynamic `--<driver>-<param>` switch parsing |
 | `Pug.Sqetch.Tests*` | xunit test projects, one per tier |
 
@@ -57,8 +61,8 @@ dotnet run --project Pug.Sqetch.Deployment.Cli -- <args>   # run the 'sqetch-dep
   drivers): contracts in an `.Abstractions` project, implementations
   in sibling projects, a registry keyed by name (`OrdinalIgnoreCase`). Bundling and
   deployment registries ship **empty**; the host registers built-ins via the `Register*()`
-  extension methods (see `BundleCommand`, `SqetchDeployApp.CreateDefaultRegistrar`). No real
-  database driver exists yet — tests use fakes. Journaling is deliberately *not* a family:
+  extension methods (see `BundleCommand`, `SqetchDeployApp.CreateDefaultRegistrar`).
+  Journaling is deliberately *not* a family:
   the SQL is the project's, so there is nothing to select at deploy time and no
   `--driver`/`--journal` pair to mismatch.
 - **Bundles are read through the same families**: `IBundleType.Open` returns an
@@ -133,6 +137,42 @@ dotnet run --project Pug.Sqetch.Deployment.Cli -- <args>   # run the 'sqetch-dep
   is, it cannot be "roll back the open transaction", since rollback will be requestable regardless
   of commit level and earlier boundary commits are already durable — it has to be a compensating
   path running rollback scripts in reverse through the `RollingBack*`/`RolledBack*` slots.
+- **Database drivers are ADO.NET wrappers, not SQL translators**: `AdoDatabaseDriver` holds the
+  connection, the transactions on it and the command plumbing; a provider project supplies only a
+  connection factory and a factory implementing `IDatabaseDriverFactory`. Journaling parameters are
+  bound **by their bare name, all of them**, including the ones a statement never mentions —
+  verified per provider, since neither behaviour can be read off a provider's documentation
+  (Npgsql ignores an unreferenced parameter despite rewriting named placeholders to positional
+  ones, and both providers resolve a prefixless name against every placeholder form they accept).
+  A provider needing the prefix spelled out, or refusing what it cannot see, belongs in
+  `AdoDatabaseTransaction.Bind` *with a test proving the need* — an earlier dialect-plus-SQL-scan
+  for exactly that was deleted once the probe showed no provider needed it.
+  **One connection per driver**, opened on first use and reused: a deployment's transactions are
+  strictly sequential, and session state a maintainer's statements set up survives between them. A
+  second overlapping transaction is refused as a bug. `IDatabaseDriver` is `IDisposable` because it
+  owns that connection, and disposing it **rolls back** an open transaction rather than committing
+  it; `DeployCommand` owns the lifetime. The step script timeout applies to step scripts alone —
+  a journaling statement waiting on a lock is left to the provider's default. A query's `DbCommand`
+  outlives its reader (disposing the command closes the reader), so both are released when the
+  journal disposes the reader or the transaction ends.
+- **`sqlite` driver**: `--sqlite-file <PATH>` (created if missing) or `--sqlite-connection-string`,
+  mutually exclusive. Pass `Mode=ReadWrite` in a connection string to refuse a missing file, which
+  is how a mistyped path is caught.
+- **`postgres` driver**: `--postgres-host` and `--postgres-database` (plus `port`, `username`,
+  `password`, `password-env`), or `--postgres-connection-string`, which *replaces* them rather than
+  extending them. `password-env` names an environment variable holding the password, since a command
+  line is readable by every process on the host. Journaled instants arrive as `timestamptz`; a
+  `timestamp` column would store whatever the session time zone made of them.
+- **Both engines run DDL inside a transaction**, so a release deployed at release commit level
+  really is all-or-nothing on them — the engines that commit DDL implicitly are what make the
+  compensating rollback necessary, not these.
+- **Driver tests run against real databases**: SQLite in temp files (never `:memory:`, whose
+  contents die with the connection), PostgreSQL in a Testcontainers container gated by
+  `[DockerFact]`/`[DockerTheory]`, which *skip* where the daemon socket cannot be reached rather
+  than failing. `RealDatabaseDeployment` holds the end-to-end scenarios so both providers run the
+  same ones — the only place the engine's resume decision is read back out of SQL the deployment
+  itself wrote, and the only check that a journal's `completed` column works as both a count
+  (SQLite) and a boolean (PostgreSQL).
 - **Names** (`NameRules` in the FileSystem store, surfaced early via CLI `NameValidation`):
   letters, digits and `-_+()@#.`; must start with a letter or digit, must not end with `.`,
   max 128 chars. Names become path segments and git paths.

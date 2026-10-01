@@ -1,6 +1,8 @@
 using Pug.Sqetch.Bundling;
 using Pug.Sqetch.Bundling.Layouts;
 using Pug.Sqetch.Deployment.DatabaseDriver.Abstractions;
+using Pug.Sqetch.Deployment.DatabaseDriver.PostgreSql;
+using Pug.Sqetch.Deployment.DatabaseDriver.Sqlite;
 using Spectre.Console;
 using Spectre.Console.Cli;
 
@@ -14,9 +16,9 @@ namespace Pug.Sqetch.Deployment;
 public static class SqetchDeployApp
 {
 	/// <summary>
-	/// The production composition: bundle types and layouts carry their built-ins, while
-	/// the database driver and change journal writer registries ship empty until real
-	/// implementations exist.
+	/// The production composition: every registry carries the built-ins this host offers. A driver
+	/// is registered here and nowhere else, so 'sqetch-deploy' can ship with one set of drivers
+	/// while another host — a pipeline embedding the engine — offers its own.
 	/// </summary>
 	public static TypeRegistrar CreateDefaultRegistrar()
 	{
@@ -28,7 +30,11 @@ public static class SqetchDeployApp
 
 		TypeRegistrar registrar = new ();
 
-		registrar.RegisterInstance( typeof(IDatabaseDriverRegistry), new DatabaseDriverRegistry() );
+		DatabaseDriverRegistry drivers = new ();
+		drivers.RegisterPostgreSqlDriver();
+		drivers.RegisterSqliteDriver();
+
+		registrar.RegisterInstance( typeof(IDatabaseDriverRegistry), drivers );
 		registrar.RegisterInstance( typeof(IBundleTypeRegistry), bundleTypes );
 		registrar.RegisterInstance( typeof(IBundleLayoutRegistry), layouts );
 
