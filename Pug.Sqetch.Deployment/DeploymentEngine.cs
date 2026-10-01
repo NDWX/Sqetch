@@ -179,11 +179,16 @@ public class DeploymentEngine(
 			// so these plans all belong to one release, and at most one frame is opened here
 			foreach( (ReleaseGroup release, BundleManifestPlan plan) in pending )
 			{
-				if( committed.Count == 0
-					|| !string.Equals( committed.Peek().Name, release.Name, StringComparison.Ordinal ) )
-					committed.Push( new CommittedRelease( release.Name, new Stack<BundleManifestPlan>() ) );
+				CommittedRelease? top = committed.Count > 0 ? committed.Peek() : null;
 
-				committed.Peek().Plans.Push( plan );
+				if( top is null || !string.Equals( top.Name, release.Name, StringComparison.Ordinal ) )
+				{
+					top = new CommittedRelease( release.Name, new Stack<BundleManifestPlan>() );
+
+					committed.Push( top );
+				}
+
+				top.Plans.Push( plan );
 			}
 
 			pending.Clear();
