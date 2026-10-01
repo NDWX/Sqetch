@@ -136,8 +136,9 @@ dotnet run --project Pug.Sqetch.Deployment.Cli -- deploy <bundle> --driver sqlit
   back — earlier commits stand.
 - **Rollback is compensating, not transactional** (`DeploymentRollbackMode`, `deploy --rollback`):
   `on-error` undoes what the run committed after a failure, `on-success` undoes a deployment that
-  worked — for proving a test bundle applies cleanly — and is refused for a bundle of finalized
-  releases. It runs each step's `rollback.sql` in reverse (releases, then plans, then steps) and
+  worked — for proving a bundle applies cleanly, usually a test bundle, though a bundle of
+  finalized releases is not refused: what a caller wants to prove and then undo is its own
+  business. It runs each step's `rollback.sql` in reverse (releases, then plans, then steps) and
   journals through the `RollingBack*`/`RolledBack*` slots. It is **independent of
   `DeploymentCommitLevel`**, which is the whole point: at plan level the earlier plans are already
   durable and no database transaction could take them back. The engine therefore records committed

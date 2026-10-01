@@ -15,9 +15,9 @@ public enum DeploymentRollbackMode
 	OnError,
 
 	/// <summary>
-	/// Undo a deployment that succeeded. For proving a test bundle applies cleanly and leaving the
-	/// database as it was; refused for a bundle of finalized releases, which is not something to
-	/// undo on purpose.
+	/// Undo a deployment that succeeded, leaving the database as it was. For proving a bundle
+	/// applies cleanly — most often a test bundle, though what a caller wants to prove and then undo
+	/// is its own business, so a bundle of finalized releases is not refused.
 	/// </summary>
 	OnSuccess
 }

@@ -43,13 +43,6 @@ public sealed class DeployCommand(
 		// the deployment is over — including the failure paths below, which still rethrow
 		using IDatabaseDriver owned = driver;
 
-		// undoing a finalized release on purpose is not a thing to do; the mode exists to prove a
-		// test bundle applies cleanly and leave the database as it was
-		if( settings.RollbackMode == DeploymentRollbackMode.OnSuccess
-			&& validated.Manifest.Selection != BundleSelection.Test )
-			throw new DeploymentException(
-				"--rollback on-success needs a test bundle; this one holds finalized releases." );
-
 		using ConsoleDeploymentListener listener = new ( console, settings.Log );
 
 		try

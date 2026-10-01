@@ -29,7 +29,7 @@ public class DeploymentSettings : CommandSettings
 
 	[CommandOption( "--rollback <MODE>" )]
 	[Description(
-		"Undo the deployment: 'on-error' after a failure, 'on-success' after a successful test "
+		"Undo the deployment: 'on-error' after a failure, 'on-success' after a successful "
 		+ "deployment; default none" )]
 	public string Rollback { get; init; } = "none";
 

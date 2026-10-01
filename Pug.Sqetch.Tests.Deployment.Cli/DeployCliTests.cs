@@ -175,24 +175,22 @@ public class DeployCliTests : IDisposable
 	}
 
 	/// <summary>
-	/// Undoing finalized releases on purpose is not a thing to do; the mode exists to prove a test
-	/// bundle applies cleanly and leave the database as it was.
+	/// The mode is usually pointed at a test bundle, but what a caller wants to prove and then undo
+	/// is its own business: a bundle of finalized releases deploys and is compensated like any other,
+	/// and the run reports success because the deployment it was asked to prove worked.
 	/// </summary>
 	[Fact]
-	public void RollingBackOnSuccessNeedsATestBundle()
+	public void RollingBackOnSuccessUndoesAFinalizedBundleToo()
 	{
 		CommandAppResult result = Run(
 			"deploy", WriteBundle( "demo.zip" ), "--driver", "pg", "--pg-host", "h", "--pg-database", "d",
 			"--rollback", "on-success" );
 
-		Assert.Equal( 1, result.ExitCode );
+		Assert.Equal( 0, result.ExitCode );
 
-		string message = Regex.Replace( result.Output, @"\s+", " " );
-
-		Assert.Contains( "needs a test bundle", message );
-
-		// refused before the database was touched beyond reading the journal
-		Assert.Empty( _driver.AppliedScripts );
+		Assert.Equal(
+			["create table t ()", "create index i", "-- r", "-- r"],
+			_driver.AppliedScripts );
 	}
 
 	[Fact]
