@@ -14,6 +14,7 @@
       <ProjectReference Include="..\Pug.Sqetch.Deployment\Pug.Sqetch.Deployment.csproj" />
       <ProjectReference Include="..\Pug.Sqetch.Deployment.DatabaseDrivers.Sqlite\Pug.Sqetch.Deployment.DatabaseDrivers.Sqlite.csproj" />
       <ProjectReference Include="..\Pug.Sqetch.Deployment.DatabaseDrivers.PostgreSql\Pug.Sqetch.Deployment.DatabaseDrivers.PostgreSql.csproj" />
+      <ProjectReference Include="..\Pug.Sqetch.Cli.Common\Pug.Sqetch.Cli.Common.csproj" />
     </ItemGroup>
 
     <ItemGroup>

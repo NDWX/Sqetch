@@ -1,6 +1,6 @@
 namespace Pug.Sqetch;
 
-internal enum OutputFormat
+public enum OutputFormat
 {
 	/// <summary>Table on an interactive console, tab-separated rows when piped/redirected.</summary>
 	Auto,
@@ -8,7 +8,7 @@ internal enum OutputFormat
 	Csv
 }
 
-internal static class OutputFormats
+public static class OutputFormats
 {
 	public static bool TryParse( string? value, out OutputFormat format )
 	{

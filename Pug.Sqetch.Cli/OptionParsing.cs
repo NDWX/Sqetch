@@ -1,6 +1,4 @@
 using System.Globalization;
-using Spectre.Console;
-using Spectre.Console.Cli;
 
 namespace Pug.Sqetch;
 
@@ -39,23 +37,4 @@ internal static class OptionParsing
 				Start = after ?? DateTime.MinValue,
 				End = before?.AddTicks( -1 ) ?? DateTime.MaxValue
 			};
-}
-
-/// <summary>Base settings for commands producing complex results: the '--output' switch.</summary>
-public class OutputSettings : CommandSettings
-{
-	[CommandOption( "-o|--output <FORMAT>" )]
-	public string? Output { get; init; }
-
-	internal OutputFormat Format { get; private set; }
-
-	public override ValidationResult Validate()
-	{
-		if( !OutputFormats.TryParse( Output, out OutputFormat format ) )
-			return ValidationResult.Error( "--output must be 'json' or 'csv'" );
-
-		Format = format;
-
-		return ValidationResult.Success();
-	}
 }

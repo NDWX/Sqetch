@@ -13,6 +13,7 @@
       <ProjectReference Include="..\Pug.Sqetch\Pug.Sqetch.csproj" />
       <ProjectReference Include="..\Pug.Sqetch.Bundling\Pug.Sqetch.Bundling.csproj" />
       <ProjectReference Include="..\Pug.Sqetch.ProjectInfoStores.FileSystem\Pug.Sqetch.ProjectInfoStores.FileSystem.csproj" />
+      <ProjectReference Include="..\Pug.Sqetch.Cli.Common\Pug.Sqetch.Cli.Common.csproj" />
     </ItemGroup>
 
     <ItemGroup>

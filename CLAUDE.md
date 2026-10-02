@@ -32,6 +32,7 @@ dotnet run --project Pug.Sqetch.Deployment.Cli -- deploy <bundle> --driver sqlit
 | `Pug.Sqetch.Bundling.BundleTypes` | zip / tar / tar.gz / directory implementations + `RegisterBundleTypes()` |
 | `Pug.Sqetch.Bundling.Layouts` | `DefaultBundleLayout` + `RegisterLayouts()` |
 | `Pug.Sqetch.Bundling` | `BundleBuilder` orchestration + registry implementations |
+| `Pug.Sqetch.Cli.Common` (net10.0) | What both CLIs present with: `OutputFormat`/`OutputFormats`, `OutputSettings` (`-o|--output`), `ResultWriter` |
 | `Pug.Sqetch.Cli` | Spectre.Console.Cli command tree (`SqetchApp.Configure`), the only layer touching `ProjectPaths` for output |
 | `Pug.Sqetch.Deployment.Abstractions` (net8.0) | Deployment contracts (ns `…Deployment.DatabaseDriver.Abstractions`): `IDatabaseDriverFactory`/`IDatabaseDriver`/`IDatabaseTransaction`, `JournalingParameter`, `JournaledRelease`, registry interface, deployment exceptions |
 | `Pug.Sqetch.Deployment` (net8.0) | `DeploymentEngine` (deploy flow), `StatementJournal`, `BundleValidator`/`ValidatedBundle`, driver registry, `IDeploymentListener` |
@@ -188,6 +189,18 @@ dotnet run --project Pug.Sqetch.Deployment.Cli -- deploy <bundle> --driver sqlit
   and that a failing rollback script leaves no half-finished compensation behind — the last of which
   only a real server can show, since it turns on the compensation transaction rolling its journal
   rows back with it.
+- **Both CLIs present through one writer**: `Pug.Sqetch.Cli.Common` owns the `-o|--output` contract
+  (`OutputSettings`, `OutputFormat`) and `ResultWriter` — JSON, CSV, a Spectre table on an
+  interactive console and header-less tab-separated rows when piped. It is the only project the two
+  CLIs share, and its types are public because two assemblies consume them. The CSV quoting, the
+  JSON options and the interactive-vs-piped decision are exactly what drifts when duplicated, and
+  `Pug.Sqetch.Deployment.Cli` must not reference `Pug.Sqetch.Cli` — that would drag the engine and
+  the stores into a CLI that deliberately ships without the authoring side. **The machine formats
+  are written with wrapping widened out of the way**: Spectre wraps to the profile width, which is
+  80 whenever stdout is not a terminal — precisely when those formats are used — and a wrapped line
+  is a corrupt record, not an ugly one: the newline lands inside a tab-separated field, a quoted CSV
+  cell or a JSON string, where it is an invalid control character. `Pug.Sqetch.Tests.Cli.Common`
+  pins that against a deliberately narrow, non-interactive console.
 - **`sqetch-deploy` exit codes are categorized** (`DeployExitCodes`, public because they are the
   contract a pipeline reads): the tens digit names the category and the units digit the failure
   within it, so a caller can branch on a decade without knowing every member. A units digit of `0`

@@ -11,7 +11,7 @@ namespace Pug.Sqetch;
 /// CSV on request, otherwise a table on an interactive console and header-less
 /// tab-separated rows when output is piped or redirected.
 /// </summary>
-internal static class ResultWriter
+public static class ResultWriter
 {
 	private static readonly JsonSerializerOptions JsonOptions = new ()
 	{
@@ -27,25 +27,19 @@ internal static class ResultWriter
 		switch( format )
 		{
 			case OutputFormat.Json:
-				console.WriteLine( JsonSerializer.Serialize( items.Select( json ), JsonOptions ) );
+				WriteJson( console, items.Select( json ) );
 				break;
 
 			case OutputFormat.Csv:
-				console.WriteLine( ToCsvLine( headers ) );
-
-				foreach( T item in items )
-					console.WriteLine( ToCsvLine( row( item ) ) );
-
+				WriteLines( console, [ToCsvLine( headers ), ..items.Select( x => ToCsvLine( row( x ) ) )] );
 				break;
 
 			case OutputFormat.Auto when console.Profile.Capabilities.Interactive:
-				WriteTable( console, headers, items.Select( row ) );
+				console.Write( BuildTable( headers, items.Select( row ) ) );
 				break;
 
 			default:
-				foreach( T item in items )
-					console.WriteLine( string.Join( '\t', row( item ) ) );
-
+				WriteLines( console, items.Select( x => string.Join( '\t', row( x ) ) ).ToList() );
 				break;
 		}
 	}
@@ -61,12 +55,16 @@ internal static class ResultWriter
 		switch( format )
 		{
 			case OutputFormat.Json:
-				console.WriteLine( JsonSerializer.Serialize( details, JsonOptions ) );
+				WriteJson( console, details );
 				break;
 
 			case OutputFormat.Csv:
-				console.WriteLine( ToCsvLine( pairs.Select( x => x.Label ).ToArray() ) );
-				console.WriteLine( ToCsvLine( pairs.Select( x => x.Value ).ToArray() ) );
+				WriteLines(
+					console,
+					[
+						ToCsvLine( pairs.Select( x => x.Label ).ToArray() ),
+						ToCsvLine( pairs.Select( x => x.Value ).ToArray() )
+					] );
 				break;
 
 			case OutputFormat.Auto when console.Profile.Capabilities.Interactive:
@@ -79,14 +77,42 @@ internal static class ResultWriter
 				break;
 
 			default:
-				foreach( (string label, string value) in pairs )
-					console.WriteLine( $"{label}\t{value}" );
-
+				WriteLines( console, pairs.Select( x => $"{x.Label}\t{x.Value}" ).ToList() );
 				break;
 		}
 	}
 
-	private static void WriteTable( IAnsiConsole console, string[] headers, IEnumerable<string[]> rows )
+	private static void WriteJson( IAnsiConsole console, object value )
+		=> WriteLines( console, JsonSerializer.Serialize( value, JsonOptions ).Split( '\n' ) );
+
+	/// <summary>
+	/// Writes the machine formats a line at a time with wrapping out of the way. Spectre wraps to
+	/// the profile's width, which is 80 whenever output is not a terminal — exactly when these
+	/// formats are used — and a wrapped line is a corrupt record rather than an ugly one: a newline
+	/// lands inside a tab-separated field, inside a quoted CSV cell, or inside a JSON string, which
+	/// is an invalid control character there. There is no switch for disabling it, so the width is
+	/// widened to the longest line for the duration and put back afterwards; widened to what is
+	/// needed rather than to <c>int.MaxValue</c>, since the profile's width is what Spectre sizes
+	/// its own buffers from.
+	/// </summary>
+	private static void WriteLines( IAnsiConsole console, IReadOnlyList<string> lines )
+	{
+		int width = console.Profile.Width;
+
+		console.Profile.Width = lines.Count == 0 ? width : Math.Max( width, lines.Max( x => x.Length ) + 1 );
+
+		try
+		{
+			foreach( string line in lines )
+				console.WriteLine( line );
+		}
+		finally
+		{
+			console.Profile.Width = width;
+		}
+	}
+
+	private static Table BuildTable( string[] headers, IEnumerable<string[]> rows )
 	{
 		Table table = new ();
 
@@ -96,7 +122,7 @@ internal static class ResultWriter
 		foreach( string[] row in rows )
 			table.AddRow( row.Select( IRenderable ( x ) => new Text( x ) ).ToArray() );
 
-		console.Write( table );
+		return table;
 	}
 
 	private static string ToCsvLine( string[] cells )
