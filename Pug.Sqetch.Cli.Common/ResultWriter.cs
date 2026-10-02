@@ -45,6 +45,61 @@ public static class ResultWriter
 	}
 
 	/// <summary>
+	/// A result made of several tables — a set of groupings and then the things grouped, say. The
+	/// machine formats stay single documents: JSON serializes <paramref name="json"/> once, so the
+	/// whole result is one object rather than one per section, while CSV, being a rectangle by
+	/// definition, becomes one block per section separated by a blank line and introduced by the
+	/// section's key. Piped output prefixes every row with that key, since header-less rows from two
+	/// sections would otherwise be indistinguishable.
+	/// </summary>
+	public static void WriteSections(
+		IAnsiConsole console, OutputFormat format, object json, IReadOnlyList<ResultSection> sections )
+	{
+		switch( format )
+		{
+			case OutputFormat.Json:
+				WriteJson( console, json );
+				break;
+
+			case OutputFormat.Csv:
+				List<string> lines = [];
+
+				foreach( ResultSection section in sections )
+				{
+					if( lines.Count > 0 )
+						lines.Add( "" );
+
+					lines.Add( ToCsvLine( [section.Key] ) );
+					lines.Add( ToCsvLine( section.Headers ) );
+					lines.AddRange( section.Rows.Select( ToCsvLine ) );
+				}
+
+				WriteLines( console, lines );
+				break;
+
+			case OutputFormat.Auto when console.Profile.Capabilities.Interactive:
+				foreach( ResultSection section in sections )
+				{
+					Table table = BuildTable( section.Headers, section.Rows );
+
+					table.Title = new TableTitle( section.Heading, new Style( decoration: Decoration.Bold ) );
+
+					console.Write( table );
+				}
+
+				break;
+
+			default:
+				WriteLines(
+					console,
+					sections
+						.SelectMany( section => section.Rows.Select( row => $"{section.Key}\t{string.Join( '\t', row )}" ) )
+						.ToList() );
+				break;
+		}
+	}
+
+	/// <summary>
 	/// Single-item detail view: a label/value table (or 'label\tvalue' lines when piped);
 	/// JSON serializes <paramref name="details"/> itself, CSV emits one header + one row.
 	/// </summary>

@@ -63,7 +63,23 @@ public static class SqetchDeployApp
 		config.AddCommand<DeployCommand>( "deploy" )
 				.WithDescription(
 					"Deploy a bundle's plans in manifest order; driver parameters are passed as "
-					+ "--<driver>-<parameter> <value> (use --<driver>-<parameter>=<value> for values starting with '-')" );
+					+ "--<driver>-<parameter> <value> (use --<driver>-<parameter>=<value> for values starting with '-'). "
+					+ "Run 'drivers parameters <driver>' to see which a driver takes" );
+
+		// the driver switches cannot appear in 'deploy --help': they are the selected driver's, and
+		// no driver is selected while help is being printed
+		config.AddBranch( "drivers", drivers =>
+		{
+			drivers.SetDescription( "Inspect the database drivers this host offers" );
+
+			drivers.AddCommand<DriverListCommand>( "list" )
+					.WithDescription( "List the driver names '--driver' accepts" );
+
+			drivers.AddCommand<DriverParametersCommand>( "parameters" )
+					.WithDescription(
+						"Show a driver's --<driver>-<parameter> switches, and the parameter sets it requires "
+						+ "— any one of which must be supplied in full" );
+		} );
 
 		config.AddCommand<RollbackCommand>( "rollback" )
 				.WithDescription( "Roll back deployed releases (not yet supported)" );

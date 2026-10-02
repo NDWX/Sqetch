@@ -12,7 +12,9 @@ public class DeploymentSettings : CommandSettings
 	public string Bundle { get; init; } = null!;
 
 	[CommandOption( "-d|--driver <NAME>" )]
-	[Description( "Database driver; its parameters are passed as --<driver>-<parameter> <value>" )]
+	[Description(
+		"Database driver; its parameters are passed as --<driver>-<parameter> <value>. "
+		+ "See 'drivers list' and 'drivers parameters <driver>'" )]
 	public string? Driver { get; init; }
 
 	[CommandOption( "-t|--bundle-type <TYPE>" )]
@@ -47,7 +49,7 @@ public class DeploymentSettings : CommandSettings
 	public override ValidationResult Validate()
 	{
 		if( string.IsNullOrEmpty( Driver ) )
-			return ValidationResult.Error( "--driver is required" );
+			return ValidationResult.Error( "--driver is required; 'drivers list' names the ones this host offers" );
 
 		if( TimeoutSeconds < 0 )
 			return ValidationResult.Error( "--timeout must be zero or a positive number of seconds" );

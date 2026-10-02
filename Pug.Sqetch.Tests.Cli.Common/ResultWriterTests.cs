@@ -68,10 +68,74 @@ public class ResultWriterTests
 		Assert.Equal( [$"Note\t{Long}"], Lines() );
 	}
 
+	[Fact]
+	public void PipedSectionsPrefixEveryRowWithItsSectionKey()
+	{
+		WriteSections( OutputFormat.Auto );
+
+		Assert.Equal(
+			["sets\t1\ta b", "sets\t2\tc", "items\ta\tfirst", "items\tb\tsecond"],
+			Lines() );
+	}
+
+	/// <summary>
+	/// CSV is a rectangle, so a result of two tables becomes two blocks, each introduced by its
+	/// section key and separated by a blank line.
+	/// </summary>
+	[Fact]
+	public void CsvSplitsSectionsIntoBlocks()
+	{
+		WriteSections( OutputFormat.Csv );
+
+		Assert.Equal(
+			[
+				"sets", "Set,Parameters", "1,a b", "2,c",
+				"", "items", "Name,Description", "a,first", "b,second"
+			],
+			AllLines() );
+	}
+
+	/// <summary>One document, not one per section: a consumer binds a single object.</summary>
+	[Fact]
+	public void JsonSerializesTheWholeSectionedResultOnce()
+	{
+		WriteSections( OutputFormat.Json );
+
+		JsonElement result = JsonSerializer.Deserialize<JsonElement>( _console.Output );
+
+		Assert.Equal( 2, result.GetProperty( "sets" ).GetArrayLength() );
+		Assert.Equal( 2, result.GetProperty( "items" ).GetArrayLength() );
+	}
+
+	[Fact]
+	public void AnEmptySectionWritesNothingButStillCounts()
+	{
+		ResultWriter.WriteSections(
+			_console, OutputFormat.Csv, new { },
+			[
+				new ResultSection( "empty", "Empty", ["Set"], [] ),
+				new ResultSection( "items", "Items", ["Name"], [["a"]] )
+			] );
+
+		Assert.Equal( ["empty", "Set", "", "items", "Name", "a"], AllLines() );
+	}
+
+	private void WriteSections( OutputFormat format )
+		=> ResultWriter.WriteSections(
+			_console, format,
+			new { sets = new[] { new[] { "a", "b" }, ["c"] }, items = new[] { new { name = "a" }, new { name = "b" } } },
+			[
+				new ResultSection( "sets", "Sets", ["Set", "Parameters"], [["1", "a b"], ["2", "c"]] ),
+				new ResultSection( "items", "Items", ["Name", "Description"], [["a", "first"], ["b", "second"]] )
+			] );
+
 	private string[] Lines()
 		=> _console.Output
 					.Split( '\n', StringSplitOptions.RemoveEmptyEntries )
 					.Select( x => x.TrimEnd( '\r' ) )
 					.ToArray();
 
+	/// <summary>Keeps the blank lines, which separate CSV blocks and so carry meaning.</summary>
+	private string[] AllLines()
+		=> _console.Output.Split( '\n' ).Select( x => x.TrimEnd( '\r' ) ).SkipLast( 1 ).ToArray();
 }

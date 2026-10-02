@@ -17,6 +17,7 @@ dotnet test                  # all test projects; must be green before any commi
 dotnet run --project Pug.Sqetch.Cli -- <args>   # run the 'sqetch' CLI
 dotnet run --project Pug.Sqetch.Deployment.Cli -- <args>   # run the 'sqetch-deploy' CLI
 dotnet run --project Pug.Sqetch.Deployment.Cli -- deploy <bundle> --driver sqlite --sqlite-file db
+dotnet run --project Pug.Sqetch.Deployment.Cli -- drivers parameters sqlite   # a driver's switches
 ```
 
 ## Solution layout
@@ -167,6 +168,22 @@ dotnet run --project Pug.Sqetch.Deployment.Cli -- deploy <bundle> --driver sqlit
   a journaling statement waiting on a lock is left to the provider's default. A query's `DbCommand`
   outlives its reader (disposing the command closes the reader), so both are released when the
   journal disposes the reader or the transaction ends.
+- **`sqetch-deploy drivers` answers from the registry alone** (`drivers list`, `drivers parameters
+  [<driver>]`), so unlike every other command it needs neither a bundle nor a database — which is
+  the point: whoever is reaching for a driver name has neither to hand yet. `parameters` prints the
+  **required sets first and the per-parameter descriptions after**, because required-ness is a fact
+  about *sets* (`[["host","database"],["connection-string"]]`) and nothing per-parameter can express
+  it — a column marking each one required or not would turn a choice between two ways of connecting
+  into seven independent flags. Switches are shown as a caller types them (`--postgres-host`), the
+  way `journaling parameters` shows `@project`. A driver with no required sets still gets an empty
+  sets section, so the result's shape does not depend on what it finds. Because `StrictParsing` is
+  off app-wide, both commands must call `RemainingArguments.RejectAll` — without it a typo'd option
+  lands in `IRemainingArguments` and the command reports success. Listing every driver constructs
+  every factory, since `GetParametersDefinition` is an instance method; harmless while factories are
+  connectionless, but a factory doing real work in its constructor would do it merely to be listed.
+  A bare `sqetch-deploy drivers` prints the branch help and exits `1`, which is Spectre's own
+  behaviour for a branch without a command (`sqetch journaling` does the same) rather than a code
+  this CLI chose.
 - **`sqlite` driver**: `--sqlite-file <PATH>` (created if missing) or `--sqlite-connection-string`,
   mutually exclusive. Pass `Mode=ReadWrite` in a connection string to refuse a missing file, which
   is how a mistyped path is caught.
@@ -199,8 +216,11 @@ dotnet run --project Pug.Sqetch.Deployment.Cli -- deploy <bundle> --driver sqlit
   are written with wrapping widened out of the way**: Spectre wraps to the profile width, which is
   80 whenever stdout is not a terminal — precisely when those formats are used — and a wrapped line
   is a corrupt record, not an ugly one: the newline lands inside a tab-separated field, a quoted CSV
-  cell or a JSON string, where it is an invalid control character. `Pug.Sqetch.Tests.Cli.Common`
-  pins that against a deliberately narrow, non-interactive console.
+  cell or a JSON string, where it is an invalid control character. `WriteSections` renders a result
+  made of several tables (a set of groupings, then the things grouped): one JSON document, one CSV
+  block per section keyed by the section's name, and piped rows prefixed with that key, since
+  header-less rows from two sections are otherwise indistinguishable. `Pug.Sqetch.Tests.Cli.Common`
+  pins all of it against a deliberately narrow, non-interactive console.
 - **`sqetch-deploy` exit codes are categorized** (`DeployExitCodes`, public because they are the
   contract a pipeline reads): the tens digit names the category and the units digit the failure
   within it, so a caller can branch on a decade without knowing every member. A units digit of `0`
