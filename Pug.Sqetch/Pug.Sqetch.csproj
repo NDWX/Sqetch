@@ -10,7 +10,6 @@
     <ItemGroup>
       <ProjectReference Include="..\Pug.Sqetch.Abstractions\Pug.Sqetch.Abstractions.csproj" />
       <ProjectReference Include="..\Pug.Sqetch.Models\Pug.Sqetch.Models.csproj" />
-      <ProjectReference Include="..\Pug.Sqetch.ProjectInfoStore.Abstractions\Pug.Sqetch.ProjectInfoStore.Abstractions.csproj" />
     </ItemGroup>
 
 </Project>

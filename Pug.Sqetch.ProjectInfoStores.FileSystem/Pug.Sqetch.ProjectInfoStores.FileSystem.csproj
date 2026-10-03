@@ -7,7 +7,6 @@
     </PropertyGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\Pug.Sqetch.ProjectInfoStore.Abstractions\Pug.Sqetch.ProjectInfoStore.Abstractions.csproj" />
       <ProjectReference Include="..\Pug.Sqetch.Abstractions\Pug.Sqetch.Abstractions.csproj" />
     </ItemGroup>
 
