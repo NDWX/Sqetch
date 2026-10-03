@@ -1,6 +1,6 @@
-using Pug.Sqetch.Stores.FileSystem;
+using Pug.Sqetch.ProjectInfoStores.FileSystem;
 
-namespace Pug.Sqetch;
+namespace Pug.Sqetch.Cli;
 
 /// <summary>
 /// One opened Sqetch project for the duration of a command: the file-system stores, the

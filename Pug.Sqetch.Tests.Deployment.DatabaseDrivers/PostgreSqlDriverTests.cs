@@ -1,7 +1,7 @@
 using System.Data;
 using Pug.Sqetch.Deployment;
-using Pug.Sqetch.Deployment.DatabaseDriver.Abstractions;
-using Pug.Sqetch.Deployment.DatabaseDriver.PostgreSql;
+using Pug.Sqetch.Deployment.DatabaseDriver;
+using Pug.Sqetch.Deployment.DatabaseDrivers.PostgreSql;
 
 namespace Pug.Sqetch.Tests.Deployment.DatabaseDrivers;
 

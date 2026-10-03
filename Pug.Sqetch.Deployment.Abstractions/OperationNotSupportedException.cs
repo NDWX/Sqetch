@@ -1,4 +1,4 @@
-namespace Pug.Sqetch.Deployment.DatabaseDriver.Abstractions;
+namespace Pug.Sqetch.Deployment;
 
 /// <summary>
 /// Thrown when a deployment operation is understood but not implemented — the standalone rollback

@@ -1,4 +1,4 @@
-namespace Pug.Sqetch;
+namespace Pug.Sqetch.Models;
 
 public record ProjectElement<TDefinition>( TDefinition Definition, ActionContext Registration )
 	where TDefinition : ObjectDefinition;

@@ -1,4 +1,6 @@
-namespace Pug.Sqetch;
+using Pug.Sqetch.Models;
+
+namespace Pug.Sqetch.ProjectInfoStore;
 
 public interface IProjectInfoStore : IDisposable
 {

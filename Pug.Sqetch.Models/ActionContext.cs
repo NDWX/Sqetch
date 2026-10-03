@@ -1,4 +1,4 @@
-namespace Pug.Sqetch;
+namespace Pug.Sqetch.Models;
 
 public record ActionContext<TSubject>( TSubject Subject, DateTime Timestamp );
 

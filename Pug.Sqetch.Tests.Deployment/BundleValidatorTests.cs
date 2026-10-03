@@ -1,6 +1,7 @@
 using Pug.Sqetch.Bundling;
+using Pug.Sqetch.Bundling.Layouts;
 using Pug.Sqetch.Deployment;
-using Pug.Sqetch.Deployment.DatabaseDriver.Abstractions;
+using Pug.Sqetch.Models;
 using static Pug.Sqetch.Tests.Deployment.Manifests;
 
 namespace Pug.Sqetch.Tests.Deployment;

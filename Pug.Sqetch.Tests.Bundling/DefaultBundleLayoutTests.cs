@@ -1,6 +1,8 @@
 using System.Text;
 using System.Text.Json;
 using Pug.Sqetch.Bundling;
+using Pug.Sqetch.Bundling.Layouts;
+using Pug.Sqetch.Models;
 
 namespace Pug.Sqetch.Tests.Bundling;
 

@@ -1,8 +1,9 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Pug.Sqetch.Models;
 
-namespace Pug.Sqetch.Bundling;
+namespace Pug.Sqetch.Bundling.Layouts;
 
 /// <summary>
 /// Default bundle layout: 'manifest.json' first — so streaming consumers see it before the

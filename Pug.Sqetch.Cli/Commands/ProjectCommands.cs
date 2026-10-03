@@ -1,9 +1,10 @@
 using System.ComponentModel;
-using Pug.Sqetch.Stores.FileSystem;
+using Pug.Sqetch.Models;
+using Pug.Sqetch.ProjectInfoStores.FileSystem;
 using Spectre.Console;
 using Spectre.Console.Cli;
 
-namespace Pug.Sqetch;
+namespace Pug.Sqetch.Cli.Commands;
 
 public sealed class ProjectInitCommand( IAnsiConsole console ) : Command<ProjectInitCommand.Settings>
 {

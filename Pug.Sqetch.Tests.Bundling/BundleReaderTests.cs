@@ -1,5 +1,6 @@
 using System.Text;
 using Pug.Sqetch.Bundling;
+using Pug.Sqetch.Bundling.BundleTypes;
 
 namespace Pug.Sqetch.Tests.Bundling;
 

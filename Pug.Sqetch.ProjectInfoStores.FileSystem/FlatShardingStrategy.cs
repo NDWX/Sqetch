@@ -1,4 +1,4 @@
-namespace Pug.Sqetch.Stores.FileSystem;
+namespace Pug.Sqetch.ProjectInfoStores.FileSystem;
 
 /// <summary>No sharding: every release folder sits directly under 'releases'.</summary>
 public sealed class FlatShardingStrategy : IReleaseShardingStrategy

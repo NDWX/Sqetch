@@ -1,6 +1,7 @@
 using System.Globalization;
+using Pug.Sqetch.Models;
 
-namespace Pug.Sqetch;
+namespace Pug.Sqetch.Cli;
 
 internal static class OptionParsing
 {

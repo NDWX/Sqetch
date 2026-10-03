@@ -1,6 +1,6 @@
-using Pug.Sqetch.Deployment.DatabaseDriver.Abstractions;
+using Pug.Sqetch.Deployment.DatabaseDriver;
 
-namespace Pug.Sqetch.Deployment.DatabaseDriver.Sqlite;
+namespace Pug.Sqetch.Deployment.DatabaseDrivers.Sqlite;
 
 public static class IDatabaseDriverRegistryExtensionMethods
 {

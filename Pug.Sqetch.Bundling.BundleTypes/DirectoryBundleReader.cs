@@ -1,4 +1,4 @@
-namespace Pug.Sqetch.Bundling;
+namespace Pug.Sqetch.Bundling.BundleTypes;
 
 /// <summary>
 /// Reads bundle entries from a directory tree. Serves the directory bundle type in place

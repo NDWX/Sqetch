@@ -1,4 +1,4 @@
-namespace Pug.Sqetch.Deployment.DatabaseDriver.Abstractions;
+namespace Pug.Sqetch.Deployment;
 
 /// <summary>The bundle is malformed: content listed in its manifest is missing, or the
 /// manifest itself is inconsistent — a release listed twice, a plan referencing a release the

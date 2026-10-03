@@ -1,7 +1,8 @@
+using Pug.Sqetch.Cli.Commands;
 using Spectre.Console;
 using Spectre.Console.Cli;
 
-namespace Pug.Sqetch;
+namespace Pug.Sqetch.Cli;
 
 /// <summary>
 /// The 'sqetch' command tree. Kept separate from the entry point so tests can host the

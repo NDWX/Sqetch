@@ -1,4 +1,5 @@
 using Pug.Sqetch;
+using Pug.Sqetch.Cli;
 using Spectre.Console.Cli;
 
 CommandApp app = new ();

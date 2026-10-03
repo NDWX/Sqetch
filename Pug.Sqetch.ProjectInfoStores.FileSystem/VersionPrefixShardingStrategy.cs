@@ -1,4 +1,4 @@
-namespace Pug.Sqetch.Stores.FileSystem;
+namespace Pug.Sqetch.ProjectInfoStores.FileSystem;
 
 /// <summary>
 /// Shards finalized releases by the leading segment of the release name, e.g. with the

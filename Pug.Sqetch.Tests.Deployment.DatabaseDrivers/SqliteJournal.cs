@@ -1,3 +1,5 @@
+using Pug.Sqetch.Models;
+
 namespace Pug.Sqetch.Tests.Deployment.DatabaseDrivers;
 
 /// <summary>

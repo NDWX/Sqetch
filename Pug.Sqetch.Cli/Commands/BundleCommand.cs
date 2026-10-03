@@ -1,10 +1,12 @@
 using System.ComponentModel;
 using Pug.Sqetch.Bundling;
+using Pug.Sqetch.Bundling.BundleTypes;
 using Pug.Sqetch.Bundling.Layouts;
+using Pug.Sqetch.Models;
 using Spectre.Console;
 using Spectre.Console.Cli;
 
-namespace Pug.Sqetch;
+namespace Pug.Sqetch.Cli.Commands;
 
 public sealed class BundleCommand( IAnsiConsole console ) : Command<BundleCommand.Settings>
 {

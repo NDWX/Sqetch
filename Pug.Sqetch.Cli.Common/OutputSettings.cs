@@ -1,7 +1,7 @@
 using Spectre.Console;
 using Spectre.Console.Cli;
 
-namespace Pug.Sqetch;
+namespace Pug.Sqetch.Cli;
 
 /// <summary>Base settings for commands producing complex results: the '--output' switch.</summary>
 public class OutputSettings : CommandSettings

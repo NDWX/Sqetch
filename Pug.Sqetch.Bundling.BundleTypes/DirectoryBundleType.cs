@@ -1,4 +1,4 @@
-namespace Pug.Sqetch.Bundling;
+namespace Pug.Sqetch.Bundling.BundleTypes;
 
 /// <summary>
 /// Writes the bundle as a plain directory tree instead of an archive: each entry becomes a

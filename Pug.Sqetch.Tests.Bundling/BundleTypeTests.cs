@@ -2,6 +2,7 @@ using System.Formats.Tar;
 using System.IO.Compression;
 using System.Text;
 using Pug.Sqetch.Bundling;
+using Pug.Sqetch.Bundling.BundleTypes;
 
 namespace Pug.Sqetch.Tests.Bundling;
 

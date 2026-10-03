@@ -1,4 +1,4 @@
-namespace Pug.Sqetch;
+namespace Pug.Sqetch.Models;
 
 /// <summary>
 /// A project's complete journaling SQL: every <see cref="JournalingSlot"/>, with the statements each

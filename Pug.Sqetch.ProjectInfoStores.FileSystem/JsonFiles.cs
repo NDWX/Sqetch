@@ -1,6 +1,6 @@
 using System.Text.Json;
 
-namespace Pug.Sqetch.Stores.FileSystem;
+namespace Pug.Sqetch.ProjectInfoStores.FileSystem;
 
 internal static class JsonFiles
 {

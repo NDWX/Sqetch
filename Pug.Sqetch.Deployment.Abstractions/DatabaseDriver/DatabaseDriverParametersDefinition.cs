@@ -1,4 +1,4 @@
-namespace Pug.Sqetch.Deployment.DatabaseDriver.Abstractions;
+namespace Pug.Sqetch.Deployment.DatabaseDriver;
 
 /// <summary>
 /// Represents the definition of parameters required and supported by a database driver.

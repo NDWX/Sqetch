@@ -1,8 +1,9 @@
 using System.Data;
-using Pug.Sqetch.Deployment.DatabaseDriver.Abstractions;
 // JournalingSlot, JournalingSlots and JournalingStatements live in Pug.Sqetch.Models, namespace
 // Pug.Sqetch, reachable transitively via the Bundling.Abstractions project reference.
 using Pug.Sqetch;
+using Pug.Sqetch.Deployment.DatabaseDriver;
+using Pug.Sqetch.Models;
 
 namespace Pug.Sqetch.Deployment;
 

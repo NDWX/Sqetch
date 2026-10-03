@@ -1,4 +1,4 @@
-namespace Pug.Sqetch.Deployment.DatabaseDriver.Abstractions;
+namespace Pug.Sqetch.Deployment;
 
 /// <summary>
 /// Thrown when a rollback script fails. The database is then partially compensated — some of the

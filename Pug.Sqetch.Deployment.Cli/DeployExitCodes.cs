@@ -1,8 +1,9 @@
 using Pug.Sqetch.Bundling;
-using Pug.Sqetch.Deployment.DatabaseDriver.Abstractions;
+using Pug.Sqetch.Deployment.DatabaseDriver;
+using Pug.Sqetch.Models;
 using Spectre.Console.Cli;
 
-namespace Pug.Sqetch.Deployment;
+namespace Pug.Sqetch.Deployment.Cli;
 
 /// <summary>
 /// What 'sqetch-deploy' returns to its caller. Codes are grouped by cause: the tens digit names the

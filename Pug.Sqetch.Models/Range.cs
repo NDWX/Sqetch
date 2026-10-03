@@ -1,4 +1,4 @@
-namespace Pug.Sqetch;
+namespace Pug.Sqetch.Models;
 
 public class Range<T> where T : IComparable<T>
 {

@@ -35,7 +35,7 @@ dotnet run --project Pug.Sqetch.Deployment.Cli -- drivers parameters sqlite   # 
 | `Pug.Sqetch.Bundling` | `BundleBuilder` orchestration + registry implementations |
 | `Pug.Sqetch.Cli.Common` (net10.0) | What both CLIs present with: `OutputFormat`/`OutputFormats`, `OutputSettings` (`-o|--output`), `ResultWriter` |
 | `Pug.Sqetch.Cli` | Spectre.Console.Cli command tree (`SqetchApp.Configure`), the only layer touching `ProjectPaths` for output |
-| `Pug.Sqetch.Deployment.Abstractions` (net8.0) | Deployment contracts (ns `…Deployment.DatabaseDriver.Abstractions`): `IDatabaseDriverFactory`/`IDatabaseDriver`/`IDatabaseTransaction`, `JournalingParameter`, `JournaledRelease`, registry interface, deployment exceptions |
+| `Pug.Sqetch.Deployment.Abstractions` (net8.0) | Deployment contracts (driver contract in ns `Pug.Sqetch.Deployment.DatabaseDriver`): `IDatabaseDriverFactory`/`IDatabaseDriver`/`IDatabaseTransaction`, `JournalingParameter`, `JournaledRelease`, registry interface, deployment exceptions |
 | `Pug.Sqetch.Deployment` (net8.0) | `DeploymentEngine` (deploy flow), `StatementJournal`, `BundleValidator`/`ValidatedBundle`, driver registry, `IDeploymentListener` |
 | `Pug.Sqetch.Deployment.DatabaseDrivers.Ado` (net8.0) | `AdoDatabaseDriver`/`AdoDatabaseTransaction`/`AdoDialect`: the ADO.NET half every provider driver inherits |
 | `Pug.Sqetch.Deployment.DatabaseDrivers.Sqlite` | `SqliteDatabaseDriverFactory` (Microsoft.Data.Sqlite) + `RegisterSqliteDriver()` |
@@ -254,6 +254,12 @@ dotnet run --project Pug.Sqetch.Deployment.Cli -- drivers parameters sqlite   # 
 ## Conventions
 
 - Tabs for indentation; spaces inside parentheses: `Foo( bar, baz )`; file-scoped namespaces.
+- **Namespaces follow the project name and folder**: a production project's namespace is its name
+  with any `.Common` or `.Abstractions` suffix dropped, plus the folder path — so
+  `Pug.Sqetch.Cli.Common` is `Pug.Sqetch.Cli`, the root of `Pug.Sqetch.Deployment.Abstractions` is
+  `Pug.Sqetch.Deployment` and its `DatabaseDriver/` folder `Pug.Sqetch.Deployment.DatabaseDriver`. Each
+  project's `RootNamespace` encodes the rule, so Rider's *Adjust Namespaces* keeps files in line. The
+  sqetch CLI imports its `Rows` helpers through an alias because `Spectre.Console.Rows` shares the name.
 - Exceptions: plain classes with get-only properties and an optional message via `base(...)`
   (see `UnknownPlanException`); mapped to friendly CLI messages in `CliErrors.Describe`,
   surfaced by the central `SetExceptionHandler` in `SqetchApp` with exit code 1.

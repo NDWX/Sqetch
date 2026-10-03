@@ -1,4 +1,4 @@
-namespace Pug.Sqetch.Deployment.DatabaseDriver.Abstractions;
+namespace Pug.Sqetch.Deployment;
 
 /// <summary>
 /// Thrown when a project's journaling SQL fails or returns something the deployment cannot read.

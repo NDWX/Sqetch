@@ -1,7 +1,7 @@
 using System.Formats.Tar;
 using System.IO.Compression;
 
-namespace Pug.Sqetch.Bundling;
+namespace Pug.Sqetch.Bundling.BundleTypes;
 
 public sealed class TarGzBundleType : IBundleType
 {

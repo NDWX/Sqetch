@@ -1,4 +1,4 @@
-namespace Pug.Sqetch.Deployment.DatabaseDriver.Abstractions;
+namespace Pug.Sqetch.Deployment.DatabaseDriver;
 
 /// <summary>
 /// Entry point for each database driver

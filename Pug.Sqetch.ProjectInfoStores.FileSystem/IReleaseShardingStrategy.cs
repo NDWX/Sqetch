@@ -1,4 +1,4 @@
-namespace Pug.Sqetch.Stores.FileSystem;
+namespace Pug.Sqetch.ProjectInfoStores.FileSystem;
 
 /// <summary>
 /// Decides where a <em>finalized</em> release folder lives under the 'releases' directory,

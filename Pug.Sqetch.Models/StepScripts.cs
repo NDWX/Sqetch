@@ -1,4 +1,4 @@
-namespace Pug.Sqetch;
+namespace Pug.Sqetch.Models;
 
 public record StepScripts(Stream? DeployScript, Stream? VerifyScript, Stream? RollbackScript) : IDisposable, IAsyncDisposable
 {

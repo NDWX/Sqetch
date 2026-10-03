@@ -1,4 +1,5 @@
 using Pug.Sqetch.Deployment;
+using Pug.Sqetch.Deployment.Cli;
 using Spectre.Console.Cli;
 
 CommandApp app = new ( SqetchDeployApp.CreateDefaultRegistrar() );

@@ -1,4 +1,6 @@
-namespace Pug.Sqetch.Stores.FileSystem;
+using Pug.Sqetch.Models;
+
+namespace Pug.Sqetch.ProjectInfoStores.FileSystem;
 
 // On-disk JSON shapes. Property declaration order is the serialized order, so keep it
 // stable — it defines the diff-friendly file format, not just an implementation detail.

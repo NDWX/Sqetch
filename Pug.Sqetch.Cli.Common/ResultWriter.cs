@@ -3,7 +3,7 @@ using System.Text.Json;
 using Spectre.Console;
 using Spectre.Console.Rendering;
 
-namespace Pug.Sqetch;
+namespace Pug.Sqetch.Cli;
 
 /// <summary>
 /// Renders complex command results. Scalars are printed directly by commands; anything

@@ -1,4 +1,4 @@
-namespace Pug.Sqetch;
+namespace Pug.Sqetch.Models;
 
 /// <summary>
 /// The journaling SQL a project must define, one statement set per slot. Twelve slots name a

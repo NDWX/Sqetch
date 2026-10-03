@@ -1,6 +1,6 @@
-using Pug.Sqetch.Stores.FileSystem;
+using Pug.Sqetch.ProjectInfoStores.FileSystem;
 
-namespace Pug.Sqetch;
+namespace Pug.Sqetch.Cli;
 
 /// <summary>
 /// Early, option-level validation of user-chosen plan, step and release names, delegating

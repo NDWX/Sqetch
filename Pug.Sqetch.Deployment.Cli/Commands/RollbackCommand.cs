@@ -1,9 +1,8 @@
 using System.ComponentModel;
-using Pug.Sqetch.Deployment.DatabaseDriver.Abstractions;
 using Spectre.Console;
 using Spectre.Console.Cli;
 
-namespace Pug.Sqetch.Deployment;
+namespace Pug.Sqetch.Deployment.Cli.Commands;
 
 public sealed class RollbackSettings : DeploymentSettings
 {

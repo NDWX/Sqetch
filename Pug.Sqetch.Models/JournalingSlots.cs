@@ -1,4 +1,4 @@
-namespace Pug.Sqetch;
+namespace Pug.Sqetch.Models;
 
 /// <summary>
 /// What each <see cref="JournalingSlot"/> is called on disk and which parameters its statements may

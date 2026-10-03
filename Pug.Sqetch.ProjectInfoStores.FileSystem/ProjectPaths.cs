@@ -1,4 +1,6 @@
-namespace Pug.Sqetch.Stores.FileSystem;
+using Pug.Sqetch.Models;
+
+namespace Pug.Sqetch.ProjectInfoStores.FileSystem;
 
 /// <summary>
 /// Single owner of the project's on-disk layout: every path is constructed here, and

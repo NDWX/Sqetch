@@ -1,9 +1,9 @@
 using System.Data.Common;
 using Microsoft.Data.Sqlite;
-using Pug.Sqetch.Deployment.DatabaseDriver.Abstractions;
-using Pug.Sqetch.Deployment.DatabaseDriver.Ado;
+using Pug.Sqetch.Deployment.DatabaseDriver;
+using Pug.Sqetch.Deployment.DatabaseDrivers.Ado;
 
-namespace Pug.Sqetch.Deployment.DatabaseDriver.Sqlite;
+namespace Pug.Sqetch.Deployment.DatabaseDrivers.Sqlite;
 
 /// <summary>
 /// Deploys to a SQLite database file. SQLite runs DDL inside a transaction like any other

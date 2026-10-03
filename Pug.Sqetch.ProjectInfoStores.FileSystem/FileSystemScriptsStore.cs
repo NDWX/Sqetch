@@ -1,4 +1,6 @@
-namespace Pug.Sqetch.Stores.FileSystem;
+using Pug.Sqetch.Models;
+
+namespace Pug.Sqetch.ProjectInfoStores.FileSystem;
 
 /// <summary>
 /// Stores a step's deploy/verify/rollback scripts as plain .sql files inside the step's

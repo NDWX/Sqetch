@@ -1,4 +1,4 @@
-namespace Pug.Sqetch.Deployment.DatabaseDriver.Abstractions;
+namespace Pug.Sqetch.Deployment.DatabaseDriver;
 
 /// <summary>The selected database driver refused the provided parameters or failed to initialize.</summary>
 public class DriverCreationException

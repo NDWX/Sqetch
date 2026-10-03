@@ -1,12 +1,14 @@
 using Pug.Sqetch.Bundling;
+using Pug.Sqetch.Bundling.BundleTypes;
 using Pug.Sqetch.Bundling.Layouts;
-using Pug.Sqetch.Deployment.DatabaseDriver.Abstractions;
-using Pug.Sqetch.Deployment.DatabaseDriver.PostgreSql;
-using Pug.Sqetch.Deployment.DatabaseDriver.Sqlite;
+using Pug.Sqetch.Deployment.Cli.Commands;
+using Pug.Sqetch.Deployment.DatabaseDriver;
+using Pug.Sqetch.Deployment.DatabaseDrivers.PostgreSql;
+using Pug.Sqetch.Deployment.DatabaseDrivers.Sqlite;
 using Spectre.Console;
 using Spectre.Console.Cli;
 
-namespace Pug.Sqetch.Deployment;
+namespace Pug.Sqetch.Deployment.Cli;
 
 /// <summary>
 /// The 'sqetch-deploy' command tree. Kept separate from the entry point so tests can host

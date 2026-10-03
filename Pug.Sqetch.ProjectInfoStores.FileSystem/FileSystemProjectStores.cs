@@ -1,4 +1,7 @@
-namespace Pug.Sqetch.Stores.FileSystem;
+using Pug.Sqetch.Models;
+using Pug.Sqetch.ProjectInfoStore;
+
+namespace Pug.Sqetch.ProjectInfoStores.FileSystem;
 
 /// <summary>
 /// Entry point for the file-system project store: initializes a project directory or

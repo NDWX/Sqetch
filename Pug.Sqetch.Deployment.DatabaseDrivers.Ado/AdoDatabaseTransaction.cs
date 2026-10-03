@@ -1,8 +1,8 @@
 using System.Data;
 using System.Data.Common;
-using Pug.Sqetch.Deployment.DatabaseDriver.Abstractions;
+using Pug.Sqetch.Deployment.DatabaseDriver;
 
-namespace Pug.Sqetch.Deployment.DatabaseDriver.Ado;
+namespace Pug.Sqetch.Deployment.DatabaseDrivers.Ado;
 
 /// <summary>
 /// One ADO.NET transaction: the scripts and journaling statements run inside it, and the single

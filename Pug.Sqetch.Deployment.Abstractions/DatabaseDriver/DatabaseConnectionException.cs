@@ -1,4 +1,4 @@
-namespace Pug.Sqetch.Deployment.DatabaseDriver.Abstractions;
+namespace Pug.Sqetch.Deployment.DatabaseDriver;
 
 /// <summary>
 /// Thrown when the database cannot be reached: the connection a driver opens on first use failed.

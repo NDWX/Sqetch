@@ -1,4 +1,4 @@
-namespace Pug.Sqetch.Stores.FileSystem;
+namespace Pug.Sqetch.ProjectInfoStores.FileSystem;
 
 /// <summary>
 /// State shared by <see cref="FileSystemProjectInfoStore"/> and

@@ -1,6 +1,7 @@
 using System.Text.Json;
+using Pug.Sqetch.Models;
 
-namespace Pug.Sqetch;
+namespace Pug.Sqetch.Cli;
 
 /// <summary>
 /// Resolves the acting user from '.sqetch-user' files: the project directory first, then

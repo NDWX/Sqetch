@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Pug.Sqetch.Cli;
 using Spectre.Console;
 using Spectre.Console.Testing;
 

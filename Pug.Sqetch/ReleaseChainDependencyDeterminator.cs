@@ -1,3 +1,6 @@
+using Pug.Sqetch.Models;
+using Pug.Sqetch.ProjectInfoStore;
+
 namespace Pug.Sqetch;
 
 /// <summary>

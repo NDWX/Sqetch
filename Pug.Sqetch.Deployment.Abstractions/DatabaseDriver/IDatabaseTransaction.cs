@@ -1,6 +1,6 @@
 using System.Data;
 
-namespace Pug.Sqetch.Deployment.DatabaseDriver.Abstractions;
+namespace Pug.Sqetch.Deployment.DatabaseDriver;
 
 /// <summary>
 /// Provides an abstraction for managing database transactions.

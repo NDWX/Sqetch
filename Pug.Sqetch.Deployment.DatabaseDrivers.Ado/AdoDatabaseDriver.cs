@@ -1,7 +1,7 @@
 using System.Data.Common;
-using Pug.Sqetch.Deployment.DatabaseDriver.Abstractions;
+using Pug.Sqetch.Deployment.DatabaseDriver;
 
-namespace Pug.Sqetch.Deployment.DatabaseDriver.Ado;
+namespace Pug.Sqetch.Deployment.DatabaseDrivers.Ado;
 
 /// <summary>
 /// The ADO.NET half of every driver: a connection, the transactions opened on it, and the command

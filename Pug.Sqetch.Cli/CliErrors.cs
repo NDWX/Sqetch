@@ -1,7 +1,7 @@
 using Pug.Sqetch.Bundling;
-using Pug.Sqetch.Stores.FileSystem;
+using Pug.Sqetch.ProjectInfoStores.FileSystem;
 
-namespace Pug.Sqetch;
+namespace Pug.Sqetch.Cli;
 
 internal static class CliErrors
 {

@@ -1,4 +1,4 @@
-namespace Pug.Sqetch.Deployment.DatabaseDriver.Abstractions;
+namespace Pug.Sqetch.Deployment;
 
 /// <summary>
 /// The release the change journal is at, and whether it finished deploying.

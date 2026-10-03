@@ -1,4 +1,5 @@
-using Pug.Sqetch.Stores.FileSystem;
+using Pug.Sqetch.Models;
+using Pug.Sqetch.ProjectInfoStores.FileSystem;
 using Pug.Sqetch.Tests.Stores.FileSystem;
 
 namespace Pug.Sqetch.Tests;

@@ -1,4 +1,7 @@
-namespace Pug.Sqetch.Stores.FileSystem;
+using Pug.Sqetch.Models;
+using Pug.Sqetch.ProjectInfoStore;
+
+namespace Pug.Sqetch.ProjectInfoStores.FileSystem;
 
 /// <summary>
 /// Git-friendly file-system implementation of <see cref="IProjectInfoStore"/>. Unreleased

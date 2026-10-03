@@ -1,6 +1,6 @@
 using System.Formats.Tar;
 
-namespace Pug.Sqetch.Bundling;
+namespace Pug.Sqetch.Bundling.BundleTypes;
 
 public sealed class TarBundleType : IBundleType
 {

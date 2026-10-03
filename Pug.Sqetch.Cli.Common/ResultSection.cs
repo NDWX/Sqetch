@@ -1,4 +1,4 @@
-namespace Pug.Sqetch;
+namespace Pug.Sqetch.Cli;
 
 /// <summary>
 /// One table within a composite result. <c>Key</c> is the stable machine name: it prefixes every

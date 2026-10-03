@@ -1,6 +1,8 @@
 using System.Formats.Tar;
 using System.IO.Compression;
 using System.Text.Json;
+using Pug.Sqetch.Cli;
+using Pug.Sqetch.Models;
 using Spectre.Console.Cli.Testing;
 
 namespace Pug.Sqetch.Tests.Cli;

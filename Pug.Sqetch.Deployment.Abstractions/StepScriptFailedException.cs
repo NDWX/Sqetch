@@ -1,4 +1,4 @@
-namespace Pug.Sqetch.Deployment.DatabaseDriver.Abstractions;
+namespace Pug.Sqetch.Deployment;
 
 /// <summary>A deploy step script failed; the surrounding transaction has been rolled back.</summary>
 public class StepScriptFailedException

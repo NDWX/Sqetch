@@ -1,8 +1,8 @@
 using System.Data;
 using Microsoft.Data.Sqlite;
 using Pug.Sqetch.Deployment;
-using Pug.Sqetch.Deployment.DatabaseDriver.Abstractions;
-using Pug.Sqetch.Deployment.DatabaseDriver.Sqlite;
+using Pug.Sqetch.Deployment.DatabaseDriver;
+using Pug.Sqetch.Deployment.DatabaseDrivers.Sqlite;
 
 namespace Pug.Sqetch.Tests.Deployment.DatabaseDrivers;
 

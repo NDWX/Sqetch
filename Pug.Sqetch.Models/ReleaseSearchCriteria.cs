@@ -1,4 +1,4 @@
-namespace Pug.Sqetch;
+namespace Pug.Sqetch.Models;
 
 /// <summary>
 /// Filter criteria for release listings. With no criteria set, only unfinalized releases match.

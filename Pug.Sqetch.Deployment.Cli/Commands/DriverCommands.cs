@@ -1,9 +1,10 @@
 using System.ComponentModel;
-using Pug.Sqetch.Deployment.DatabaseDriver.Abstractions;
+using Pug.Sqetch.Cli;
+using Pug.Sqetch.Deployment.DatabaseDriver;
 using Spectre.Console;
 using Spectre.Console.Cli;
 
-namespace Pug.Sqetch.Deployment;
+namespace Pug.Sqetch.Deployment.Cli.Commands;
 
 /// <summary>
 /// The names '--driver' accepts, as this host registered them. Answers from the driver registry

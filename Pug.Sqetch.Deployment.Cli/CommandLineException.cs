@@ -1,6 +1,4 @@
-using Pug.Sqetch.Deployment.DatabaseDriver.Abstractions;
-
-namespace Pug.Sqetch.Deployment;
+namespace Pug.Sqetch.Deployment.Cli;
 
 /// <summary>
 /// The command line itself is wrong, as judged by the checks the command tree cannot make for

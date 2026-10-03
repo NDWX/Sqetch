@@ -1,6 +1,6 @@
 using System.IO.Compression;
 
-namespace Pug.Sqetch.Bundling;
+namespace Pug.Sqetch.Bundling.BundleTypes;
 
 public sealed class ZipBundleType : IBundleType
 {

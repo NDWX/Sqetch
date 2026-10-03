@@ -1,6 +1,7 @@
 using System.Globalization;
+using Pug.Sqetch.Models;
 
-namespace Pug.Sqetch;
+namespace Pug.Sqetch.Cli.Output;
 
 /// <summary>Row projections shared by the table, TSV and CSV renderings.</summary>
 internal static class Rows

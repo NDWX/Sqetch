@@ -1,4 +1,4 @@
-namespace Pug.Sqetch.Stores.FileSystem;
+namespace Pug.Sqetch.ProjectInfoStores.FileSystem;
 
 internal sealed record PlanIndexEntry( string Name, string Release, string[] Dependencies );
 

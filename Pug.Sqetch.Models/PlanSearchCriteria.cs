@@ -1,4 +1,4 @@
-namespace Pug.Sqetch;
+namespace Pug.Sqetch.Models;
 
 /// <summary>
 /// Filter criteria for plan listings. With no criteria set, only unreleased plans match.

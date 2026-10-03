@@ -1,4 +1,5 @@
 using Pug.Sqetch.Bundling;
+using Pug.Sqetch.Models;
 
 namespace Pug.Sqetch.Deployment;
 

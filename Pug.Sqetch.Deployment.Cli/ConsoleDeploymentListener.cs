@@ -1,6 +1,6 @@
 using Spectre.Console;
 
-namespace Pug.Sqetch.Deployment;
+namespace Pug.Sqetch.Deployment.Cli;
 
 /// <summary>
 /// Reports deployment progress to the console and, when a log path is given, appends the

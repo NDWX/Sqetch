@@ -1,4 +1,4 @@
-namespace Pug.Sqetch.Bundling;
+namespace Pug.Sqetch.Bundling.BundleTypes;
 
 internal static class BundleInput
 {

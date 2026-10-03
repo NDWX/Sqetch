@@ -1,8 +1,9 @@
 using System.ComponentModel;
+using Pug.Sqetch.Models;
 using Spectre.Console;
 using Spectre.Console.Cli;
 
-namespace Pug.Sqetch;
+namespace Pug.Sqetch.Cli.Commands;
 
 /// <summary>
 /// A '&lt;SLOT&gt;' positional argument shared by 'print' and 'set', resolved case-insensitively

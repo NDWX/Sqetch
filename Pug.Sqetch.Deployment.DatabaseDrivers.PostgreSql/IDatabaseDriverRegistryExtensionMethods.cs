@@ -1,6 +1,6 @@
-using Pug.Sqetch.Deployment.DatabaseDriver.Abstractions;
+using Pug.Sqetch.Deployment.DatabaseDriver;
 
-namespace Pug.Sqetch.Deployment.DatabaseDriver.PostgreSql;
+namespace Pug.Sqetch.Deployment.DatabaseDrivers.PostgreSql;
 
 public static class IDatabaseDriverRegistryExtensionMethods
 {

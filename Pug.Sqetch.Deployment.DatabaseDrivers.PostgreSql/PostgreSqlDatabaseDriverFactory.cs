@@ -1,8 +1,8 @@
 using Npgsql;
-using Pug.Sqetch.Deployment.DatabaseDriver.Abstractions;
-using Pug.Sqetch.Deployment.DatabaseDriver.Ado;
+using Pug.Sqetch.Deployment.DatabaseDriver;
+using Pug.Sqetch.Deployment.DatabaseDrivers.Ado;
 
-namespace Pug.Sqetch.Deployment.DatabaseDriver.PostgreSql;
+namespace Pug.Sqetch.Deployment.DatabaseDrivers.PostgreSql;
 
 /// <summary>
 /// Deploys to PostgreSQL through Npgsql. PostgreSQL runs DDL inside a transaction, so a release

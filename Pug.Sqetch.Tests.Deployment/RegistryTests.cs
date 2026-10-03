@@ -1,5 +1,5 @@
 using Pug.Sqetch.Deployment;
-using Pug.Sqetch.Deployment.DatabaseDriver.Abstractions;
+using Pug.Sqetch.Deployment.DatabaseDriver;
 
 namespace Pug.Sqetch.Tests.Deployment;
 

@@ -1,8 +1,10 @@
 using System.ComponentModel;
+using Pug.Sqetch.Models;
 using Spectre.Console;
 using Spectre.Console.Cli;
+using Rows = Pug.Sqetch.Cli.Output.Rows;
 
-namespace Pug.Sqetch;
+namespace Pug.Sqetch.Cli.Commands;
 
 public class StepSettings : CommandSettings
 {
