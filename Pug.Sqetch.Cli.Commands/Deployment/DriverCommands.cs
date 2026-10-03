@@ -4,7 +4,7 @@ using Pug.Sqetch.Deployment.DatabaseDriver;
 using Spectre.Console;
 using Spectre.Console.Cli;
 
-namespace Pug.Sqetch.Deployment.Cli.Commands;
+namespace Pug.Sqetch.Cli.Commands.Deployment;
 
 /// <summary>
 /// The names '--driver' accepts, as this host registered them. Answers from the driver registry

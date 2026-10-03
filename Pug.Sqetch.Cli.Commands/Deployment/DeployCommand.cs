@@ -1,11 +1,12 @@
 using Pug.Sqetch.Bundling;
 using Pug.Sqetch.Bundling.BundleTypes;
 using Pug.Sqetch.Bundling.Layouts;
+using Pug.Sqetch.Deployment;
 using Pug.Sqetch.Deployment.DatabaseDriver;
 using Spectre.Console;
 using Spectre.Console.Cli;
 
-namespace Pug.Sqetch.Deployment.Cli.Commands;
+namespace Pug.Sqetch.Cli.Commands.Deployment;
 
 public sealed class DeployCommand(
 	IAnsiConsole console,

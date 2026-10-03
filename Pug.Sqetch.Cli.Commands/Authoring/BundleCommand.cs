@@ -6,7 +6,7 @@ using Pug.Sqetch.Models;
 using Spectre.Console;
 using Spectre.Console.Cli;
 
-namespace Pug.Sqetch.Cli.Commands;
+namespace Pug.Sqetch.Cli.Commands.Authoring;
 
 public sealed class BundleCommand( IAnsiConsole console ) : Command<BundleCommand.Settings>
 {

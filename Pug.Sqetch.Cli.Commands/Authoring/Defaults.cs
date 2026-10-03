@@ -1,4 +1,4 @@
-namespace Pug.Sqetch.Cli;
+namespace Pug.Sqetch.Cli.Commands.Authoring;
 
 public static class Defaults
 {

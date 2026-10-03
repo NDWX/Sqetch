@@ -1,8 +1,9 @@
 using System.ComponentModel;
+using Pug.Sqetch.Deployment;
 using Spectre.Console;
 using Spectre.Console.Cli;
 
-namespace Pug.Sqetch.Deployment.Cli.Commands;
+namespace Pug.Sqetch.Cli.Commands.Deployment;
 
 /// <summary>Switches shared by the deploy and rollback commands.</summary>
 public class DeploymentSettings : CommandSettings

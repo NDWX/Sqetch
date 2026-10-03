@@ -4,7 +4,7 @@ using Pug.Sqetch.ProjectInfoStores.FileSystem;
 using Spectre.Console;
 using Spectre.Console.Cli;
 
-namespace Pug.Sqetch.Cli.Commands;
+namespace Pug.Sqetch.Cli.Commands.Authoring;
 
 public sealed class ProjectInitCommand( IAnsiConsole console ) : Command<ProjectInitCommand.Settings>
 {

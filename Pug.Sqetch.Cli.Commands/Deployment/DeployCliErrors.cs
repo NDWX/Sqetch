@@ -1,11 +1,12 @@
 using Pug.Sqetch.Bundling;
+using Pug.Sqetch.Deployment;
 using Pug.Sqetch.Deployment.DatabaseDriver;
 using Spectre.Console;
 using Spectre.Console.Cli;
 
-namespace Pug.Sqetch.Deployment.Cli;
+namespace Pug.Sqetch.Cli.Commands.Deployment;
 
-internal static class DeployCliErrors
+public static class DeployCliErrors
 {
 	/// <summary>
 	/// Writes the one line a failure gets. Both the central exception handler and the deploy

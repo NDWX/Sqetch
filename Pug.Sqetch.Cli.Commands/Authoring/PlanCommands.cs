@@ -2,9 +2,9 @@ using System.ComponentModel;
 using Pug.Sqetch.Models;
 using Spectre.Console;
 using Spectre.Console.Cli;
-using Rows = Pug.Sqetch.Cli.Output.Rows;
+using Rows = Pug.Sqetch.Cli.Commands.Authoring.Output.Rows;
 
-namespace Pug.Sqetch.Cli.Commands;
+namespace Pug.Sqetch.Cli.Commands.Authoring;
 
 /// <summary>Default command of the 'plan' branch: shows one plan's details.</summary>
 public sealed class PlanInfoCommand( IAnsiConsole console ) : Command<PlanInfoCommand.Settings>

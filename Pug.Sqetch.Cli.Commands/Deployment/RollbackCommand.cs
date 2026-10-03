@@ -1,8 +1,9 @@
 using System.ComponentModel;
+using Pug.Sqetch.Deployment;
 using Spectre.Console;
 using Spectre.Console.Cli;
 
-namespace Pug.Sqetch.Deployment.Cli.Commands;
+namespace Pug.Sqetch.Cli.Commands.Deployment;
 
 public sealed class RollbackSettings : DeploymentSettings
 {

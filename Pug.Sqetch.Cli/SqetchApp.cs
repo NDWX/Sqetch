@@ -1,4 +1,4 @@
-using Pug.Sqetch.Cli.Commands;
+using Pug.Sqetch.Cli.Commands.Authoring;
 using Spectre.Console;
 using Spectre.Console.Cli;
 

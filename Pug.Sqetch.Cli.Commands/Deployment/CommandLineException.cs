@@ -1,4 +1,6 @@
-namespace Pug.Sqetch.Deployment.Cli;
+using Pug.Sqetch.Deployment;
+
+namespace Pug.Sqetch.Cli.Commands.Deployment;
 
 /// <summary>
 /// The command line itself is wrong, as judged by the checks the command tree cannot make for

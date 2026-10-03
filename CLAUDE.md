@@ -32,12 +32,13 @@ dotnet run --project Pug.Sqetch.Deployment.Cli -- drivers parameters sqlite   # 
 | `Pug.Sqetch.Bundling.Layouts` | `DefaultBundleLayout` + `RegisterLayouts()` |
 | `Pug.Sqetch.Bundling` | `BundleBuilder` orchestration + registry implementations |
 | `Pug.Sqetch.Cli.Common` (net10.0) | What both CLIs present with: `OutputFormat`/`OutputFormats`, `OutputSettings` (`-o|--output`), `ResultWriter` |
-| `Pug.Sqetch.Cli` | Spectre.Console.Cli command tree (`SqetchApp.Configure`), the only layer touching `ProjectPaths` for output |
+| `Pug.Sqetch.Cli.Commands` (net10.0) | Every command of both CLIs and the helpers they use: `Authoring/` (ns `…Cli.Commands.Authoring`) for 'sqetch' — commands, `ProjectSession`, `NameValidation`, `OptionParsing`, `UserIdentity`, `Output/Rows`; `Deployment/` (ns `…Cli.Commands.Deployment`) for 'sqetch-deploy' — commands, `DeploymentSettings`, `DriverParameters`, `RemainingArguments`, `ConsoleDeploymentListener`, `DeployCliErrors`, `DeployExitCodes`. The only layer touching `ProjectPaths` for output |
+| `Pug.Sqetch.Cli` | The 'sqetch' host: `Program`, the command tree (`SqetchApp.Configure`) and `CliErrors` |
 | `Pug.Sqetch.Deployment` (net8.0) | `DeploymentEngine` (deploy flow), `StatementJournal`, `BundleValidator`/`ValidatedBundle`, driver registry, `IDeploymentListener` |
 | `Pug.Sqetch.Deployment.DatabaseDrivers.Ado` (net8.0) | `AdoDatabaseDriver`/`AdoDatabaseTransaction`/`AdoDialect`: the ADO.NET half every provider driver inherits |
 | `Pug.Sqetch.Deployment.DatabaseDrivers.Sqlite` | `SqliteDatabaseDriverFactory` (Microsoft.Data.Sqlite) + `RegisterSqliteDriver()` |
 | `Pug.Sqetch.Deployment.DatabaseDrivers.PostgreSql` | `PostgreSqlDatabaseDriverFactory` (Npgsql) + `RegisterPostgreSqlDriver()` |
-| `Pug.Sqetch.Deployment.Cli` | The 'sqetch-deploy' command tree (`SqetchDeployApp`), `TypeRegistrar` DI seam, dynamic `--<driver>-<param>` switch parsing |
+| `Pug.Sqetch.Deployment.Cli` | The 'sqetch-deploy' host: `Program`, the command tree and default composition (`SqetchDeployApp`, the only project referencing the concrete drivers), `TypeRegistrar` DI seam |
 | `Pug.Sqetch.Tests*` | xunit test projects, one per tier |
 
 ## Architecture rules
@@ -205,11 +206,12 @@ dotnet run --project Pug.Sqetch.Deployment.Cli -- drivers parameters sqlite   # 
   rows back with it.
 - **Both CLIs present through one writer**: `Pug.Sqetch.Cli.Common` owns the `-o|--output` contract
   (`OutputSettings`, `OutputFormat`) and `ResultWriter` — JSON, CSV, a Spectre table on an
-  interactive console and header-less tab-separated rows when piped. It is the only project the two
-  CLIs share, and its types are public because two assemblies consume them. The CSV quoting, the
-  JSON options and the interactive-vs-piped decision are exactly what drifts when duplicated, and
-  `Pug.Sqetch.Deployment.Cli` must not reference `Pug.Sqetch.Cli` — that would drag the engine and
-  the stores into a CLI that deliberately ships without the authoring side. **The machine formats
+  interactive console and header-less tab-separated rows when piped. Its types are public because
+  other assemblies consume them. The CSV quoting, the JSON options and the interactive-vs-piped
+  decision are exactly what drifts when duplicated. Both hosts reference `Pug.Sqetch.Cli.Commands`,
+  which holds every command of both CLIs, so **'sqetch-deploy' ships the authoring assemblies too**
+  (engine, file-system store, bundle builder) — a deliberate trade for one commands project; the
+  hosts stay thin, and only `Pug.Sqetch.Deployment.Cli` references the concrete database drivers. **The machine formats
   are written with wrapping widened out of the way**: Spectre wraps to the profile width, which is
   80 whenever stdout is not a terminal — precisely when those formats are used — and a wrapped line
   is a corrupt record, not an ugly one: the newline lands inside a tab-separated field, a quoted CSV

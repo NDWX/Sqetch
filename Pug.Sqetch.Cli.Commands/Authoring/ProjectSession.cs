@@ -1,6 +1,6 @@
 using Pug.Sqetch.ProjectInfoStores.FileSystem;
 
-namespace Pug.Sqetch.Cli;
+namespace Pug.Sqetch.Cli.Commands.Authoring;
 
 /// <summary>
 /// One opened Sqetch project for the duration of a command: the file-system stores, the

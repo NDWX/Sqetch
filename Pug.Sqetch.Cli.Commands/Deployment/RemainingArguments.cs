@@ -1,6 +1,6 @@
 using Spectre.Console.Cli;
 
-namespace Pug.Sqetch.Deployment.Cli.Commands;
+namespace Pug.Sqetch.Cli.Commands.Deployment;
 
 internal static class RemainingArguments
 {

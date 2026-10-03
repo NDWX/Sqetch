@@ -52,6 +52,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Pug.Sqetch.Cli.Common", "Pu
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Pug.Sqetch.Tests.Cli.Common", "Pug.Sqetch.Tests.Cli.Common\Pug.Sqetch.Tests.Cli.Common.csproj", "{25527F14-4F2C-401C-A6D3-27D8E6DDCFE9}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Pug.Sqetch.Cli.Commands", "Pug.Sqetch.Cli.Commands\Pug.Sqetch.Cli.Commands.csproj", "{2DDD65D4-1419-4777-A790-E20821FA3902}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -326,6 +328,18 @@ Global
 		{25527F14-4F2C-401C-A6D3-27D8E6DDCFE9}.Release|x64.Build.0 = Release|Any CPU
 		{25527F14-4F2C-401C-A6D3-27D8E6DDCFE9}.Release|x86.ActiveCfg = Release|Any CPU
 		{25527F14-4F2C-401C-A6D3-27D8E6DDCFE9}.Release|x86.Build.0 = Release|Any CPU
+		{2DDD65D4-1419-4777-A790-E20821FA3902}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2DDD65D4-1419-4777-A790-E20821FA3902}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2DDD65D4-1419-4777-A790-E20821FA3902}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{2DDD65D4-1419-4777-A790-E20821FA3902}.Debug|x64.Build.0 = Debug|Any CPU
+		{2DDD65D4-1419-4777-A790-E20821FA3902}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{2DDD65D4-1419-4777-A790-E20821FA3902}.Debug|x86.Build.0 = Debug|Any CPU
+		{2DDD65D4-1419-4777-A790-E20821FA3902}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2DDD65D4-1419-4777-A790-E20821FA3902}.Release|Any CPU.Build.0 = Release|Any CPU
+		{2DDD65D4-1419-4777-A790-E20821FA3902}.Release|x64.ActiveCfg = Release|Any CPU
+		{2DDD65D4-1419-4777-A790-E20821FA3902}.Release|x64.Build.0 = Release|Any CPU
+		{2DDD65D4-1419-4777-A790-E20821FA3902}.Release|x86.ActiveCfg = Release|Any CPU
+		{2DDD65D4-1419-4777-A790-E20821FA3902}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
