@@ -4,7 +4,7 @@ using Pug.Sqetch.Bundling.Layouts;
 using Pug.Sqetch.Cli.Commands.Deployment;
 using Pug.Sqetch.Deployment;
 using Pug.Sqetch.Deployment.Cli;
-using Pug.Sqetch.Deployment.DatabaseDriver;
+using Pug.Sqetch.DatabaseDriver;
 using Spectre.Console.Cli.Testing;
 
 namespace Pug.Sqetch.Tests.Deployment.Cli;

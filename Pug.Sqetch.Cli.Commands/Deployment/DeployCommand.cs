@@ -2,7 +2,7 @@ using Pug.Sqetch.Bundling;
 using Pug.Sqetch.Bundling.BundleTypes;
 using Pug.Sqetch.Bundling.Layouts;
 using Pug.Sqetch.Deployment;
-using Pug.Sqetch.Deployment.DatabaseDriver;
+using Pug.Sqetch.DatabaseDriver;
 using Spectre.Console;
 using Spectre.Console.Cli;
 

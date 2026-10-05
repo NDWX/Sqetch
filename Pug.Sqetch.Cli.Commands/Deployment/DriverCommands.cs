@@ -1,6 +1,6 @@
 using System.ComponentModel;
 using Pug.Sqetch.Cli;
-using Pug.Sqetch.Deployment.DatabaseDriver;
+using Pug.Sqetch.DatabaseDriver;
 using Spectre.Console;
 using Spectre.Console.Cli;
 

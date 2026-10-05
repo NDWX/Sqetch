@@ -1,4 +1,4 @@
-using Pug.Sqetch.Deployment.DatabaseDriver;
+using Pug.Sqetch.DatabaseDriver;
 using Spectre.Console.Cli;
 
 namespace Pug.Sqetch.Cli.Commands.Deployment;

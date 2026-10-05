@@ -40,13 +40,13 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Pug.Sqetch.Tests.Deployment
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Pug.Sqetch.Tests.Deployment.Cli", "Pug.Sqetch.Tests.Deployment.Cli\Pug.Sqetch.Tests.Deployment.Cli.csproj", "{0183DD36-9548-4385-A905-F74253C48FD9}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Pug.Sqetch.Deployment.DatabaseDrivers.Ado", "Pug.Sqetch.Deployment.DatabaseDrivers.Ado\Pug.Sqetch.Deployment.DatabaseDrivers.Ado.csproj", "{F63B7241-4287-4199-BB61-273EE23A20D1}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Pug.Sqetch.DatabaseDrivers.Ado", "Pug.Sqetch.DatabaseDrivers.Ado\Pug.Sqetch.DatabaseDrivers.Ado.csproj", "{F63B7241-4287-4199-BB61-273EE23A20D1}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Pug.Sqetch.Deployment.DatabaseDrivers.Sqlite", "Pug.Sqetch.Deployment.DatabaseDrivers.Sqlite\Pug.Sqetch.Deployment.DatabaseDrivers.Sqlite.csproj", "{681C8419-3B20-41DD-BC62-A4EFE8A9E023}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Pug.Sqetch.DatabaseDrivers.Sqlite", "Pug.Sqetch.DatabaseDrivers.Sqlite\Pug.Sqetch.DatabaseDrivers.Sqlite.csproj", "{681C8419-3B20-41DD-BC62-A4EFE8A9E023}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Pug.Sqetch.Deployment.DatabaseDrivers.PostgreSql", "Pug.Sqetch.Deployment.DatabaseDrivers.PostgreSql\Pug.Sqetch.Deployment.DatabaseDrivers.PostgreSql.csproj", "{2B1091B9-BDFD-4060-B920-BD908DB538CD}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Pug.Sqetch.DatabaseDrivers.PostgreSql", "Pug.Sqetch.DatabaseDrivers.PostgreSql\Pug.Sqetch.DatabaseDrivers.PostgreSql.csproj", "{2B1091B9-BDFD-4060-B920-BD908DB538CD}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Pug.Sqetch.Tests.Deployment.DatabaseDrivers", "Pug.Sqetch.Tests.Deployment.DatabaseDrivers\Pug.Sqetch.Tests.Deployment.DatabaseDrivers.csproj", "{D3D94D61-F6BD-4E73-B481-F837136DDD6A}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Pug.Sqetch.Tests.DatabaseDrivers", "Pug.Sqetch.Tests.DatabaseDrivers\Pug.Sqetch.Tests.DatabaseDrivers.csproj", "{D3D94D61-F6BD-4E73-B481-F837136DDD6A}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Pug.Sqetch.Cli.Common", "Pug.Sqetch.Cli.Common\Pug.Sqetch.Cli.Common.csproj", "{437E35CD-0DCB-4001-9DF3-3F97BCEEE5DE}"
 EndProject

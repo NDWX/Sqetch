@@ -9,8 +9,8 @@
 
     <ItemGroup>
       <ProjectReference Include="..\Pug.Sqetch.Cli.Commands\Pug.Sqetch.Cli.Commands.csproj" />
-      <ProjectReference Include="..\Pug.Sqetch.Deployment.DatabaseDrivers.Sqlite\Pug.Sqetch.Deployment.DatabaseDrivers.Sqlite.csproj" />
-      <ProjectReference Include="..\Pug.Sqetch.Deployment.DatabaseDrivers.PostgreSql\Pug.Sqetch.Deployment.DatabaseDrivers.PostgreSql.csproj" />
+      <ProjectReference Include="..\Pug.Sqetch.DatabaseDrivers.Sqlite\Pug.Sqetch.DatabaseDrivers.Sqlite.csproj" />
+      <ProjectReference Include="..\Pug.Sqetch.DatabaseDrivers.PostgreSql\Pug.Sqetch.DatabaseDrivers.PostgreSql.csproj" />
     </ItemGroup>
 
     <ItemGroup>

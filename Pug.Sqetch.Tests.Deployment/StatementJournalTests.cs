@@ -3,7 +3,7 @@ using Pug.Sqetch.Deployment;
 // JournalingSlot, JournalingSlots and JournalingStatements live in Pug.Sqetch.Models, namespace
 // Pug.Sqetch.
 using Pug.Sqetch;
-using Pug.Sqetch.Deployment.DatabaseDriver;
+using Pug.Sqetch.DatabaseDriver;
 using Pug.Sqetch.Models;
 
 namespace Pug.Sqetch.Tests.Deployment;

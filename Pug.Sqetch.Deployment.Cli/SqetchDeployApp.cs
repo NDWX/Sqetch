@@ -2,9 +2,9 @@ using Pug.Sqetch.Bundling;
 using Pug.Sqetch.Bundling.BundleTypes;
 using Pug.Sqetch.Bundling.Layouts;
 using Pug.Sqetch.Cli.Commands.Deployment;
-using Pug.Sqetch.Deployment.DatabaseDriver;
-using Pug.Sqetch.Deployment.DatabaseDrivers.PostgreSql;
-using Pug.Sqetch.Deployment.DatabaseDrivers.Sqlite;
+using Pug.Sqetch.DatabaseDriver;
+using Pug.Sqetch.DatabaseDrivers.PostgreSql;
+using Pug.Sqetch.DatabaseDrivers.Sqlite;
 using Spectre.Console;
 using Spectre.Console.Cli;
 

@@ -1,5 +1,5 @@
 using Pug.Sqetch.Deployment;
-using Pug.Sqetch.Deployment.DatabaseDriver;
+using Pug.Sqetch.DatabaseDriver;
 
 namespace Pug.Sqetch.Tests.Deployment;
 

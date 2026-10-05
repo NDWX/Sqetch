@@ -2,7 +2,7 @@ using System.Data;
 using System.Text;
 using Pug.Sqetch.Bundling;
 using Pug.Sqetch.Deployment;
-using Pug.Sqetch.Deployment.DatabaseDriver;
+using Pug.Sqetch.DatabaseDriver;
 using Pug.Sqetch.Models;
 
 namespace Pug.Sqetch.Tests.Deployment;

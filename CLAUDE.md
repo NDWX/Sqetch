@@ -25,7 +25,7 @@ dotnet run --project Pug.Sqetch.Deployment.Cli -- drivers parameters sqlite   # 
 | Project | Role |
 |---|---|
 | `Pug.Sqetch.Models` (net8.0) | Plain records: definitions, criteria, `StepScripts`, `UserInfo` |
-| `Pug.Sqetch.Abstractions` (net8.0) | Every contract, grouped by folder: root — `IProject`/`IReadOnlyProject`, `IScriptsStore`, domain exceptions; `ProjectInfoStore/` — `IProjectInfoStore`; `Bundling/` — `Bundle` model, `IBundleType`/`IBundleWriter`/`IBundleLayout`, registry interfaces, bundling exceptions; `Deployment/` — `JournaledRelease`, deployment exceptions; `Deployment/DatabaseDriver/` — `IDatabaseDriverFactory`/`IDatabaseDriver`/`IDatabaseTransaction`, `JournalingParameter`, registry interface, driver exceptions |
+| `Pug.Sqetch.Abstractions` (net8.0) | Every contract, grouped by folder: root — `IProject`/`IReadOnlyProject`, `IScriptsStore`, domain exceptions; `ProjectInfoStore/` — `IProjectInfoStore`; `Bundling/` — `Bundle` model, `IBundleType`/`IBundleWriter`/`IBundleLayout`, registry interfaces, bundling exceptions; `Deployment/` — `JournaledRelease`, deployment exceptions; `DatabaseDriver/` — `IDatabaseDriverFactory`/`IDatabaseDriver`/`IDatabaseTransaction`, `JournalingParameter`, registry interface, driver exceptions (based on `DatabaseDriverException`, not `DeploymentException`, so the driver contract does not depend on deployment) |
 | `Pug.Sqetch` | The engine (`Project`): business rules, dependency ordering, semaphores |
 | `Pug.Sqetch.ProjectInfoStores.FileSystem` | Git-friendly file store: `ProjectPaths`, sharding, plan index, `NameRules` |
 | `Pug.Sqetch.Bundling.BundleTypes` | zip / tar / tar.gz / directory implementations + `RegisterBundleTypes()` |
@@ -35,9 +35,9 @@ dotnet run --project Pug.Sqetch.Deployment.Cli -- drivers parameters sqlite   # 
 | `Pug.Sqetch.Cli.Commands` (net10.0) | Every command of both CLIs and the helpers they use: `Authoring/` (ns `…Cli.Commands.Authoring`) for 'sqetch' — commands, `ProjectSession`, `NameValidation`, `OptionParsing`, `UserIdentity`, `Output/Rows`; `Deployment/` (ns `…Cli.Commands.Deployment`) for 'sqetch-deploy' — commands, `DeploymentSettings`, `DriverParameters`, `RemainingArguments`, `ConsoleDeploymentListener`, `DeployCliErrors`, `DeployExitCodes`. The only layer touching `ProjectPaths` for output |
 | `Pug.Sqetch.Cli` | The 'sqetch' host: `Program`, the command tree (`SqetchApp.Configure`) and `CliErrors` |
 | `Pug.Sqetch.Deployment` (net8.0) | `DeploymentEngine` (deploy flow), `StatementJournal`, `BundleValidator`/`ValidatedBundle`, driver registry, `IDeploymentListener` |
-| `Pug.Sqetch.Deployment.DatabaseDrivers.Ado` (net8.0) | `AdoDatabaseDriver`/`AdoDatabaseTransaction`/`AdoDialect`: the ADO.NET half every provider driver inherits |
-| `Pug.Sqetch.Deployment.DatabaseDrivers.Sqlite` | `SqliteDatabaseDriverFactory` (Microsoft.Data.Sqlite) + `RegisterSqliteDriver()` |
-| `Pug.Sqetch.Deployment.DatabaseDrivers.PostgreSql` | `PostgreSqlDatabaseDriverFactory` (Npgsql) + `RegisterPostgreSqlDriver()` |
+| `Pug.Sqetch.DatabaseDrivers.Ado` (net8.0) | `AdoDatabaseDriver`/`AdoDatabaseTransaction`/`AdoDialect`: the ADO.NET half every provider driver inherits |
+| `Pug.Sqetch.DatabaseDrivers.Sqlite` | `SqliteDatabaseDriverFactory` (Microsoft.Data.Sqlite) + `RegisterSqliteDriver()` |
+| `Pug.Sqetch.DatabaseDrivers.PostgreSql` | `PostgreSqlDatabaseDriverFactory` (Npgsql) + `RegisterPostgreSqlDriver()` |
 | `Pug.Sqetch.Deployment.Cli` | The 'sqetch-deploy' host: `Program`, the command tree and default composition (`SqetchDeployApp`, the only project referencing the concrete drivers), `TypeRegistrar` DI seam |
 | `Pug.Sqetch.Tests*` | xunit test projects, one per tier |
 
@@ -255,8 +255,8 @@ dotnet run --project Pug.Sqetch.Deployment.Cli -- drivers parameters sqlite   # 
 - Tabs for indentation; spaces inside parentheses: `Foo( bar, baz )`; file-scoped namespaces.
 - **Namespaces follow the project name and folder**: a production project's namespace is its name
   with any `.Common` or `.Abstractions` suffix dropped, plus the folder path — so
-  `Pug.Sqetch.Cli.Common` is `Pug.Sqetch.Cli`, and `Pug.Sqetch.Abstractions`' `Deployment/DatabaseDriver/`
-  folder is `Pug.Sqetch.Deployment.DatabaseDriver`. Each
+  `Pug.Sqetch.Cli.Common` is `Pug.Sqetch.Cli`, and `Pug.Sqetch.Abstractions`' `DatabaseDriver/`
+  folder is `Pug.Sqetch.DatabaseDriver`. Each
   project's `RootNamespace` encodes the rule, so Rider's *Adjust Namespaces* keeps files in line. The
   sqetch CLI imports its `Rows` helpers through an alias because `Spectre.Console.Rows` shares the name.
 - Exceptions: plain classes with get-only properties and an optional message via `base(...)`
