@@ -1,0 +1,252 @@
+name: Release
+
+# <product>-v<X.Y.Z>      signed release (Windows Authenticode through Azure Key Vault)
+# <product>-pre-v<X.Y.Z>  unsigned pre-release
+# workflow_dispatch       dry run: builds and smoke-tests, uploads workflow artifacts, releases nothing
+# where <product> is sqetch or sqetch_deploy. Everything but the plumbing lives in
+# Installers/build/build.ps1.
+on:
+  push:
+    tags:
+      - 'sqetch-v*'
+      - 'sqetch-pre-v*'
+      - 'sqetch_deploy-v*'
+      - 'sqetch_deploy-pre-v*'
+  workflow_dispatch:
+    inputs:
+      product:
+        description: Product to build
+        type: choice
+        options: [sqetch, sqetch-deploy]
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}-${{ inputs.product }}
+  cancel-in-progress: false
+
+jobs:
+  # What is being built, decided once so every job agrees: product, version (including the pre-release
+  # timestamp) and whether the build is signed. A signed tag fails here, before anything is built,
+  # when the signing identifiers are not configured. Define them as repository variables: this job
+  # runs outside the 'release' environment, so variables defined only there are not visible to it.
+  identify:
+    runs-on: ubuntu-latest
+    outputs:
+      product: ${{ steps.identify.outputs.product }}
+      version: ${{ steps.identify.outputs.version }}
+      signed: ${{ steps.identify.outputs.signed }}
+      prerelease: ${{ steps.identify.outputs.prerelease }}
+      release: ${{ steps.identify.outputs.release }}
+      tag: ${{ steps.identify.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: identify
+        shell: pwsh
+        env:
+          PRODUCT: ${{ inputs.product }}
+          # only a tag push is a release: a dry run dispatched from a tag ref still builds unsigned -dev
+          REF: ${{ github.event_name == 'push' && github.ref || '' }}
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          SIGN_KEY_VAULT_URL: ${{ vars.SIGN_KEY_VAULT_URL }}
+          SIGN_CERTIFICATE_NAME: ${{ vars.SIGN_CERTIFICATE_NAME }}
+        run: |
+          $arguments = @{ Stage = 'identify'; Ref = $env:REF }
+          if( $env:PRODUCT ) { $arguments.Product = $env:PRODUCT }
+          ./Installers/build/build.ps1 @arguments
+
+  test:
+    uses: ./.github/workflows/ci.yml
+
+  linux:
+    needs: identify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+      - name: Publish and package
+        shell: pwsh
+        run: |
+          foreach( $stage in 'publish', 'package' )
+          {
+            ./Installers/build/build.ps1 -Stage $stage -Product '${{ needs.identify.outputs.product }}' -Version '${{ needs.identify.outputs.version }}' -Rid linux-x64,linux-arm64
+          }
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist-linux
+          path: artifacts/dist
+          if-no-files-found: error
+          overwrite: true
+
+  # A signed build runs in the 'release' environment, whose name is the subject of the Azure
+  # federated credential (repo:NDWX/Sqetch:environment:release) and where approvals may be required.
+  # An unsigned one (pre-release tag, dry run) runs in the 'unsigned' environment instead, which has no
+  # protection rules and uses no credential. The name is never empty, because GitHub's handling of an
+  # empty environment name is not documented.
+  windows:
+    needs: identify
+    runs-on: windows-latest
+    environment: ${{ needs.identify.outputs.signed == 'true' && 'release' || 'unsigned' }}
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      SIGNED: ${{ needs.identify.outputs.signed }}
+      SIGN_KEY_VAULT_URL: ${{ vars.SIGN_KEY_VAULT_URL }}
+      SIGN_CERTIFICATE_NAME: ${{ vars.SIGN_CERTIFICATE_NAME }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+      - name: Azure login
+        if: needs.identify.outputs.signed == 'true'
+        uses: azure/login@v3
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          # signing needs a Key Vault token only, no subscription access
+          allow-no-subscriptions: true
+      # fetch the Key Vault token now, while the GitHub OIDC token azure/login used is still fresh
+      # (minutes), and warm the Azure CLI the sign tool calls under a short timeout
+      - name: Key Vault token
+        if: needs.identify.outputs.signed == 'true'
+        shell: pwsh
+        run: az account get-access-token --resource https://vault.azure.net --output none
+      - name: Publish and package
+        shell: pwsh
+        run: |
+          $sign = $env:SIGNED -eq 'true'
+          foreach( $stage in 'publish', 'package' )
+          {
+            ./Installers/build/build.ps1 -Stage $stage -Product '${{ needs.identify.outputs.product }}' -Version '${{ needs.identify.outputs.version }}' -Rid win-x64,win-arm64 -Sign:$sign
+          }
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist-windows
+          path: artifacts/dist
+          if-no-files-found: error
+          overwrite: true
+
+  macos:
+    needs: identify
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+      - name: Publish and package
+        shell: pwsh
+        run: |
+          foreach( $stage in 'publish', 'package' )
+          {
+            ./Installers/build/build.ps1 -Stage $stage -Product '${{ needs.identify.outputs.product }}' -Version '${{ needs.identify.outputs.version }}' -Rid osx-x64,osx-arm64
+          }
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist-macos
+          path: artifacts/dist
+          if-no-files-found: error
+          overwrite: true
+
+  tool:
+    needs: identify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+      - run: pwsh Installers/build/build.ps1 -Stage pack-tool -Product '${{ needs.identify.outputs.product }}' -Version '${{ needs.identify.outputs.version }}'
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist-tool
+          path: artifacts/dist
+          if-no-files-found: error
+          overwrite: true
+
+  # Smoke jobs install what the build jobs produced, on a runner of the architecture it is for.
+  # The checkout is for the smoke bundle fixture (Installers/smoke/bundle) and the scripts.
+  smoke-linux:
+    needs: [identify, linux]
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist-linux
+          path: artifacts/dist
+      - run: pwsh Installers/build/build.ps1 -Stage smoke -Product '${{ needs.identify.outputs.product }}' -Version '${{ needs.identify.outputs.version }}'
+
+  smoke-windows:
+    needs: [identify, windows]
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [windows-latest, windows-11-arm]
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist-windows
+          path: artifacts/dist
+      - run: ./Installers/build/build.ps1 -Stage smoke -Product '${{ needs.identify.outputs.product }}' -Version '${{ needs.identify.outputs.version }}'
+
+  smoke-macos:
+    needs: [identify, macos]
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [macos-latest, macos-15-intel]
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist-macos
+          path: artifacts/dist
+      - run: pwsh Installers/build/build.ps1 -Stage smoke -Product '${{ needs.identify.outputs.product }}' -Version '${{ needs.identify.outputs.version }}'
+
+  smoke-tool:
+    needs: [identify, tool]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist-tool
+          path: artifacts/dist
+      - run: pwsh Installers/build/build.ps1 -Stage smoke-tool -Product '${{ needs.identify.outputs.product }}' -Version '${{ needs.identify.outputs.version }}'
+
+  # A draft GitHub release for the tag, holding every artifact and SHA256SUMS. It stays a draft: the
+  # maintainer reads it and publishes it by hand.
+  release:
+    if: github.event_name == 'push' && needs.identify.outputs.release == 'true'
+    needs: [identify, test, smoke-linux, smoke-windows, smoke-macos, smoke-tool]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      PRERELEASE: ${{ needs.identify.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: dist-*
+          merge-multiple: true
+          path: artifacts/dist
+      - name: Checksums and draft release
+        shell: pwsh
+        run: |
+          $common = @{ Product = '${{ needs.identify.outputs.product }}'; Version = '${{ needs.identify.outputs.version }}' }
+          ./Installers/build/build.ps1 -Stage checksums @common
+          ./Installers/build/build.ps1 -Stage release @common -Tag '${{ needs.identify.outputs.tag }}' -Prerelease:($env:PRERELEASE -eq 'true')

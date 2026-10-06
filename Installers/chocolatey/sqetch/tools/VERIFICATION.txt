@@ -1,0 +1,25 @@
+VERIFICATION
+
+Verification is intended to assist the Chocolatey moderators and community in verifying that this
+package's contents are trustworthy.
+
+This package embeds the Windows x64 installer (MSI) of {{PRODUCT}} {{VERSION}}:
+
+  tools\{{MSI}}
+
+The installer is built from the public source at https://github.com/NDWX/Sqetch by the repository's
+release workflow (GitHub Actions) and is not modified in any way for this package: it is the same file
+that the workflow attaches to the GitHub release. Release builds are Authenticode-signed; the signature
+can be checked with Get-AuthenticodeSignature or on the file's Digital Signatures property tab.
+
+To verify the embedded file:
+
+  1. Download the release asset
+       {{URL}}
+  2. Compute its SHA-256 hash, for example in PowerShell
+       Get-FileHash -Algorithm SHA256 .\{{MSI}}
+  3. Compare it with the hash of the embedded file and with the SHA256SUMS asset of the same release.
+     The SHA-256 of the embedded file is
+       {{SHA256}}
+
+The licence of the installed software is in tools\LICENSE.txt.

@@ -18,6 +18,7 @@ dotnet run --project Pug.Sqetch.Cli -- <args>   # run the 'sqetch' CLI
 dotnet run --project Pug.Sqetch.Deployment.Cli -- <args>   # run the 'sqetch-deploy' CLI
 dotnet run --project Pug.Sqetch.Deployment.Cli -- deploy <bundle> --driver sqlite --sqlite-file db
 dotnet run --project Pug.Sqetch.Deployment.Cli -- drivers parameters sqlite   # a driver's switches
+pwsh Installers/build/build.ps1 -Stage <stage> ...   # release build; see RELEASING.md
 ```
 
 ## Solution layout
@@ -40,6 +41,7 @@ dotnet run --project Pug.Sqetch.Deployment.Cli -- drivers parameters sqlite   # 
 | `Pug.Sqetch.DatabaseDrivers.PostgreSql` | `PostgreSqlDatabaseDriverFactory` (Npgsql) + `RegisterPostgreSqlDriver()` |
 | `Pug.Sqetch.Deployment.Cli` | The 'sqetch-deploy' host: `Program`, the command tree and default composition (`SqetchDeployApp`, the only project referencing the concrete drivers), `TypeRegistrar` DI seam |
 | `Pug.Sqetch.Tests*` | xunit test projects, one per tier |
+| `Installers/` | Release packaging (GPL): `Publish.props` (self-contained single-file when a RID is set, imported by both hosts), `build/` (`build.ps1` + `Common.ps1` + one of `Windows.ps1`/`Linux.ps1`/`MacOS.ps1`), `Wix/` (MSIs), `nfpm/` (deb/rpm), `chocolatey/`, `smoke/` (bundle fixture + `New-SmokeBundle.ps1`) |
 
 ## Architecture rules
 
@@ -249,6 +251,22 @@ dotnet run --project Pug.Sqetch.Deployment.Cli -- drivers parameters sqlite   # 
 - **`GetStepScripts` ownership**: the engine returns open streams the caller must dispose,
   and throws `MissingStepScriptsException` when a script file is missing;
   `VerifyStepScripts( plan )` checks a whole plan.
+
+- **Releases are tag-driven and all logic is PowerShell** (`RELEASING.md`): `.github/workflows/release.yml`
+  holds only triggers, runners, permissions and artifact plumbing, and every job calls a
+  `build.ps1 -Stage` that runs the same on a workstation. `build.ps1` dot-sources `Common.ps1` and
+  exactly one platform file, each of which defines `Invoke-PlatformSigning`, `New-PlatformPackages`
+  and `Test-Installers`, so no stage branches on the platform. Smoke checks are written once
+  (`Test-ProductCommands`) against a *product invoker*, so the same checks run a binary directly,
+  from PATH after an MSI install, or through `docker exec` inside the container a .deb/.rpm was
+  installed into. `sqetch-deploy`'s smoke deploys the committed `Installers/smoke/bundle` to SQLite,
+  which is what proves the native `e_sqlite3` beside the single file loads; regenerate it with
+  `New-SmokeBundle.ps1` whenever the manifest or journaling contract changes. The two CLIs release
+  independently (`sqetch-v*`, `sqetch_deploy-v*`); the tag's `X.Y.Z` must equal the host project's
+  `<Version>`. A `-pre-` tag builds `X.Y.Z-pre.<UTC stamp>` unsigned; a plain tag requires signing.
+  Formats that cannot carry the suffix keep `X.Y.Z` (MSI ProductVersion) or translate it (deb/rpm
+  `~pre…`, which sorts before the release), but every **file name** carries the full version as
+  written, because GitHub rewrites `~` in asset names and `SHA256SUMS` must match them.
 
 ## Conventions
 

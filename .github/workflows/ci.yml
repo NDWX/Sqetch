@@ -1,0 +1,19 @@
+name: CI
+
+on:
+  push:
+    branches: [develop, main]
+  pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+      # Docker is present on the runner, so the Testcontainers PostgreSQL tests run for real
+      - run: pwsh Installers/build/build.ps1 -Stage test

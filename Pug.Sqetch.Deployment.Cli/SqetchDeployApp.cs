@@ -47,6 +47,9 @@ public static class SqetchDeployApp
 	{
 		config.SetApplicationName( "sqetch-deploy" );
 
+		// '--version' prints the version the release was built as (the tag's, plus any pre-release suffix)
+		config.UseAssemblyInformationalVersion();
+
 		// unknown options must flow into the remaining arguments, where the deploy command
 		// picks up the driver's --<driver>-<parameter> switches
 		config.Settings.StrictParsing = false;

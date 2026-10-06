@@ -1,0 +1,32 @@
+{
+  "project": {
+    "name": "smoke",
+    "description": "Fixture for the installer smoke tests",
+    "engine": ""
+  },
+  "selection": "finalized",
+  "generated": "2026-10-05T10:04:04.5100831+00:00",
+  "releases": [
+    {
+      "name": "smoke-1",
+      "description": "The only release of the smoke fixture",
+      "dependency": "",
+      "finalized": true
+    }
+  ],
+  "plans": [
+    {
+      "name": "create-greetings",
+      "description": "Creates the greetings table",
+      "release": "smoke-1",
+      "dependencies": [],
+      "steps": [
+        {
+          "name": "greetings-table",
+          "description": "The greetings table",
+          "dependencies": []
+        }
+      ]
+    }
+  ]
+}

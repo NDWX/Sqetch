@@ -1,0 +1,3 @@
+# the committed fixture is byte-identical on every platform: its scripts are what a smoke test
+# deploys, and Windows runs must deploy the same bytes the Linux packages do
+bundle/** text eol=lf

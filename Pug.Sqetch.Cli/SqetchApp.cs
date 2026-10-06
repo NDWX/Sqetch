@@ -14,6 +14,9 @@ public static class SqetchApp
 	{
 		config.SetApplicationName( "sqetch" );
 
+		// '--version' prints the version the release was built as (the tag's, plus any pre-release suffix)
+		config.UseAssemblyInformationalVersion();
+
 		config.SetExceptionHandler( ( exception, resolver ) =>
 		{
 			IAnsiConsole console = resolver?.Resolve( typeof(IAnsiConsole) ) as IAnsiConsole ?? AnsiConsole.Console;

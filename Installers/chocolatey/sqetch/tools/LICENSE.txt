@@ -1,0 +1,19 @@
+Sqetch (command line tool 'sqetch')
+Copyright (C) Pug
+
+This package embeds the Windows installer (MSI) of the Sqetch command line tool. The tool combines
+projects under two licences, so the distributed binaries are licensed as
+
+    GPL-3.0-or-later AND AGPL-3.0-or-later
+
+  - the command-line layer and the packaging sources: GNU General Public License, version 3 or (at your
+    option) any later version
+  - the engine, stores, bundling, deployment and database-driver libraries it links: GNU Affero General
+    Public License, version 3 or (at your option) any later version
+
+The complete texts of both licences follow this statement. The licence mapping per project is in
+LICENSING.md (https://github.com/NDWX/Sqetch/blob/main/LICENSING.md) and the licences of the third-party
+packages and of the .NET runtime that the tool ships with are in the THIRD-PARTY-NOTICES.txt,
+DOTNET-LICENSE.txt and DOTNET-THIRD-PARTY-NOTICES.txt files that the installer places next to the tool.
+
+Source code: https://github.com/NDWX/Sqetch

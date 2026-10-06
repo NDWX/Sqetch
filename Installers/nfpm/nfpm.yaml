@@ -1,0 +1,68 @@
+# nfpm template for the .deb and .rpm of both products. Linux.ps1 renders it into the staging
+# folder, replacing the four ${SQETCH_...} placeholders (SQETCH_ARCH is amd64 or arm64), and runs the
+# result in the goreleaser/nfpm container. nfpm's own environment expansion is not used because it
+# leaves the paths under 'contents' alone, and the paths are where the product name matters.
+#
+# Layout: the whole self-contained publish output in /usr/lib/<name>/ (the executable and the
+# native libraries it loads from beside itself), /usr/bin/<name> a symlink to the executable, and
+# the licence texts in /usr/share/doc/<name>/ only. Linux.ps1 stages the publish output into
+# /stage/lib and /stage/doc to make that split.
+name: ${SQETCH_NAME}
+arch: ${SQETCH_ARCH}
+platform: linux
+
+# A semver prerelease (0.1.0-pre.202610051000, 0.1.0-dev.202610051000) sorts before the release it
+# precedes: nfpm writes it as version 0.1.0~pre.202610051000 in a deb and in an rpm (the rpm's Release
+# is 1), and '~' sorts before the end of the string in both. Test-Installers checks this with each
+# packager's own comparison.
+version: ${SQETCH_VERSION}
+version_schema: semver
+
+section: database
+priority: optional
+maintainer: Pug
+vendor: Pug
+homepage: https://github.com/NDWX/Sqetch
+license: GPL-3.0-or-later AND AGPL-3.0-or-later
+description: "${SQETCH_DESCRIPTION}"
+
+contents:
+  - src: /stage/lib
+    dst: /usr/lib/${SQETCH_NAME}
+    type: tree
+  - src: /usr/lib/${SQETCH_NAME}/${SQETCH_NAME}
+    dst: /usr/bin/${SQETCH_NAME}
+    type: symlink
+  - src: /stage/doc
+    dst: /usr/share/doc/${SQETCH_NAME}
+    type: tree
+
+# The .NET runtime's native prerequisites for a self-contained app
+# (https://learn.microsoft.com/dotnet/core/install/linux-debian#dependencies and the Fedora/RHEL
+# equivalent). ICU stays a dependency because the build is not globalization-invariant; Npgsql uses
+# OpenSSL for TLS and the Kerberos GSSAPI for integrated authentication.
+overrides:
+  deb:
+    depends:
+      - libc6
+      - libgcc-s1
+      - libstdc++6
+      - zlib1g
+      - libgssapi-krb5-2
+      - tzdata
+      # OpenSSL 3: libssl3t64 from Debian 13 and Ubuntu 24.04, libssl3 before the 64-bit time_t transition
+      - libssl3t64 | libssl3
+      # ICU's package name carries its major version; the newest first, so apt's pick on a system
+      # offering several is the newest. 78 and 77 are forward compatibility; 76 is Debian 13,
+      # 74 Ubuntu 24.04, 72 Debian 12, 70 Ubuntu 22.04.
+      - libicu78 | libicu77 | libicu76 | libicu75 | libicu74 | libicu73 | libicu72 | libicu71 | libicu70
+  rpm:
+    depends:
+      - glibc
+      - libgcc
+      - libstdc++
+      - zlib
+      - krb5-libs
+      - openssl-libs
+      - libicu
+      - tzdata
