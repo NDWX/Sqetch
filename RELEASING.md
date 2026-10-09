@@ -69,6 +69,19 @@ Without `-Version`, a stage builds `X.Y.Z-dev.<stamp>`. When you run the stages 
 pass the same `-Version` to each. Output goes to `artifacts/`. The MSI and Chocolatey packages build
 only on Windows; `.deb`/`.rpm` need Docker.
 
+## Docker Hub login (one-time, before CI can pass)
+
+The test job pulls the PostgreSQL and Ryuk images for the Testcontainers tests. Docker Hub caps
+anonymous pulls per IP address, and GitHub-hosted runners share addresses, so CI logs in and its
+pulls count against an account instead. In *Settings → Secrets and variables → Actions*:
+
+- the repository **variable** `DOCKERHUB_USERNAME`;
+- the repository **secret** `DOCKERHUB_TOKEN`, a Docker Hub personal access token (read-only is
+  enough for public images).
+
+Without them the login step fails with "Password required", in `ci.yml` and in the release
+workflow's `test` job, which calls it with `secrets: inherit`.
+
 ## Signing setup (one-time, before the first release tag)
 
 Windows executables and MSIs are signed with the .NET `sign` tool (pinned in

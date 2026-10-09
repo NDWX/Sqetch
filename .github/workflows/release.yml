@@ -60,6 +60,8 @@ jobs:
 
   test:
     uses: ./.github/workflows/ci.yml
+    # a called workflow sees no secrets unless the caller passes them, and ci.yml needs DOCKERHUB_TOKEN
+    secrets: inherit
 
   linux:
     needs: identify
